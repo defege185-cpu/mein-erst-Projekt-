@@ -1,2 +1,2 @@
 # mein-erst-Projekt-
-Privat
+Public 
