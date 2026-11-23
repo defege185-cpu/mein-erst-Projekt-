@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Détecteur Caméra &amp; Micro</title>
+<style>
+:root { --bg:#0b1220; --card:#141d31; --text:#e8edf7; --muted:#9aa7c0; --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e; }
+* { box-sizing:border-box; }
+html,body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 16px 0; border-bottom:1px solid #22304d; }
+h1 { font-size:1.1rem; margin:0; min-width:0; }
+.top { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+#lang { width:auto; max-width:40%; padding:6px; font-size:.9rem; }
+nav { display:flex; gap:4px; }
+.tab { flex:1; background:none; border:none; color:var(--muted); padding:10px 4px; font-size:.95rem; border-bottom:3px solid transparent; }
+.tab.active { color:var(--text); border-color:var(--accent); }
+#photoCount { background:var(--danger); color:#fff; border-radius:10px; padding:0 7px; font-size:.75rem; }
+main { padding:12px 16px 40px; max-width:720px; margin:0 auto; }
+.panel { display:none; } .panel.active { display:block; }
+#viewer { position:relative; width:100%; aspect-ratio:3/4; max-height:65vh; background:#000; border-radius:14px; overflow:hidden; }
+#video, #overlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.status { position:absolute; left:8px; right:8px; bottom:8px; padding:8px 10px; border-radius:10px; font-weight:600; text-align:center; background:rgba(0,0,0,.6); }
+.status.ok { background:rgba(34,197,94,.85); } .status.alert { background:rgba(239,68,68,.92); animation:pulse .6s infinite alternate; }
+@keyframes pulse { to { transform:scale(1.03); } }
+#flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .3s; }
+.controls { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+button { background:var(--card); color:var(--text); border:1px solid #2a3a5c; border-radius:10px; padding:12px; font-size:1rem; }
+button:disabled { opacity:.4; } button.on { background:#facc15; color:#000; }
+.controls button { flex:1 1 20%; min-width:0; padding:12px 6px; } .primary { background:var(--accent); border-color:var(--accent); flex:1 1 100% !important; }
+.settings { display:grid; gap:10px; background:var(--card); padding:12px; border-radius:12px; }
+.settings label { display:grid; gap:4px; font-size:.95rem; }
+.settings label.check { display:flex; gap:8px; align-items:center; }
+select, input[type=range], #lang { width:100%; font-size:1rem; padding:6px; background:#0f1728; color:var(--text); border:1px solid #2a3a5c; border-radius:8px; }
+.card { background:var(--card); padding:12px; border-radius:12px; margin-top:12px; }
+.card h3 { margin:0 0 6px; font-size:1rem; }
+.card.warn { border-left:4px solid #f59e0b; }
+.meter { height:14px; background:#0f1728; border-radius:7px; overflow:hidden; }
+#magBar { height:100%; width:0; background:linear-gradient(90deg,var(--ok),#facc15,var(--danger)); transition:width .2s; }
+.small { color:var(--muted); font-size:.85rem; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+#gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+.shot { background:var(--card); border-radius:10px; overflow:hidden; }
+.shot img { width:100%; display:block; }
+.shot .meta { padding:6px 8px; font-size:.8rem; color:var(--muted); }
+.shot .acts { display:flex; } .shot .acts button { flex:1; border-radius:0; padding:10px 4px; font-size:1.25rem; }
+ol li { margin-bottom:10px; line-height:1.4; }
+
+[dir=rtl] .status { direction:rtl; }
+.shot .acts button { min-width:0; }
+#lang { width:auto; max-width:45%; font-size:.9rem; }
+.modal { position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
+.modal[hidden] { display:none; }
+.modal-box { background:var(--card); border:1px solid #2a3a5c; border-radius:14px; padding:16px; max-width:480px; width:100%; max-height:90vh; overflow:auto; }
+.modal-box h2 { margin:0 0 8px; font-size:1.15rem; }
+.modal-box li { margin-bottom:8px; line-height:1.4; }
+.modal-box li:last-child { color:var(--muted); font-size:.9rem; }
+.thumb { display:block; width:100%; padding:0; border:0; border-radius:0; background:none; }
+.viewer { position:fixed; inset:0; z-index:30; background:#000; display:flex; align-items:center; justify-content:center; }
+.viewer[hidden] { display:none; }
+.viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+.viewer .close { position:absolute; top:calc(12px + env(safe-area-inset-top)); right:16px; font-size:1.6rem; color:#fff; background:rgba(0,0,0,.5); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>🔍 <span data-i18n="title">Détecteur Caméra &amp; Micro</span></h1>
+    <select id="lang" aria-label="Langue / Language"></select>
+  </div>
+  <nav>
+    <button class="tab active" data-tab="scan"><span data-i18n="tabScan">Scanner</span></button>
+    <button class="tab" data-tab="photos"><span data-i18n="tabPhotos">Photos</span> <span id="photoCount">0</span></button>
+    <button class="tab" data-tab="guide"><span data-i18n="tabGuide">Guide</span></button>
+  </nav>
+</header>
+
+<main>
+  <section id="scan" class="panel active">
+    <div id="viewer">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status idle" role="status" aria-live="polite"></div>
+      <div id="flash"></div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="primary"></button>
+      <button id="torchBtn" disabled data-i18n="torch"></button>
+      <button id="switchBtn" disabled data-i18n="switchCam"></button>
+      <button id="snapBtn" disabled data-i18n="photo"></button>
+    </div>
+
+    <div class="settings">
+      <label><span data-i18n="mode"></span>
+        <select id="mode">
+          <option value="reflet" data-i18n="modeReflect"></option>
+          <option value="ir" data-i18n="modeIR"></option>
+        </select>
+      </label>
+      <label><span><span data-i18n="sensitivity"></span> <b id="sensVal">5</b></span>
+        <input id="sens" type="range" min="1" max="10" value="5">
+      </label>
+      <label class="check"><input id="autoShot" type="checkbox" checked> <span data-i18n="autoShot"></span></label>
+      <label class="check"><input id="sound" type="checkbox" checked> <span data-i18n="sound"></span></label>
+    </div>
+
+    <div class="card" id="magCard">
+      <h3 data-i18n="magTitle"></h3>
+      <p id="magInfo"></p>
+      <div class="meter"><div id="magBar"></div></div>
+      <p class="small" data-i18n="magHint"></p>
+    </div>
+  </section>
+
+  <section id="photos" class="panel">
+    <div class="row">
+      <h2 data-i18n="photosTitle"></h2>
+      <button id="clearBtn" data-i18n="clearAll"></button>
+    </div>
+    <p class="small" data-i18n="photosHint"></p>
+    <div id="gallery"></div>
+  </section>
+
+  <section id="guide" class="panel">
+    <h2 data-i18n="guideTitle"></h2>
+    <ol id="guideList"></ol>
+    <div class="card warn" id="guideWarn"></div>
+  </section>
+</main>
+
+<div id="permHelp" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="permTitle">
+  <div class="modal-box">
+    <h2 id="permTitle" data-i18n="permTitle"></h2>
+    <p id="permIntro" data-i18n="permIntro"></p>
+    <ol id="permSteps"></ol>
+    <div class="controls">
+      <button id="permRetry" class="primary" data-i18n="retry"></button>
+      <button id="permClose" data-i18n="close"></button>
+    </div>
+  </div>
+</div>
+
+<div id="photoViewer" class="viewer" hidden><img id="viewerImg" alt=""><span class="close">✕</span></div>
+
+<script>
+// Traductions de l'application. Pour ajouter une langue : copier le bloc "en" et traduire.
+(function (root) {
+  'use strict';
+  const T = {
+    fr: {
+      _name: 'Français',
+      title: 'Détecteur Caméra & Micro',
+      tabScan: 'Scanner', tabPhotos: 'Photos', tabGuide: 'Guide',
+      statusIdle: 'Appuyez sur « Démarrer le scan »',
+      start: '▶ Démarrer le scan', stop: '⏹ Arrêter', torch: '🔦 Lampe', photo: '📷 Photo', switchCam: '🔄 Caméra',
+      mode: 'Mode', modeReflect: "Reflet d'objectif (lampe allumée)", modeIR: 'Infrarouge (pièce dans le noir)',
+      sensitivity: 'Sensibilité',
+      autoShot: "Photo automatique dès qu'une caméra est suspectée", sound: 'Bip + vibration',
+      magTitle: '🧲 Détecteur magnétique (micros, électronique)',
+      magInit: 'Le magnétomètre sera activé au démarrage du scan si votre téléphone le permet.',
+      magHint: "Approchez le téléphone (à 2–5 cm) des objets : une forte hausse peut signaler un micro, une batterie ou un circuit électronique caché.",
+      magNotSupported: 'Magnétomètre non accessible depuis le navigateur sur cet appareil. Sur Android/Chrome : chrome://flags → « Generic Sensor Extra Classes » → Enabled.',
+      magUnavailable: 'Magnétomètre indisponible : {e}',
+      magField: 'Champ : {v} µT • écart : {d} µT', magWarn: ' ⚠️ électronique/métal proche !',
+      photosTitle: 'Photos des détections', clearAll: '🗑 Tout effacer',
+      photosHint: "Les photos restent sur votre téléphone (rien n'est envoyé sur Internet). Touchez « Enregistrer » pour les garder dans vos fichiers.",
+      noPhotos: 'Aucune photo pour le moment.', save: '💾 Enregistrer', share: '📤 Partager', confirmClear: 'Effacer toutes les photos ?',
+      scanning: 'Scan en cours… balayez lentement', nothing: 'Scan en cours… rien de suspect',
+      noisy: "Trop de reflets ici (surface brillante) — changez d'angle",
+      alertLens: 'Objectif de caméra suspect !', alertIR: 'LED infrarouge suspecte !', stopped: 'Scan arrêté',
+      noCamera: 'Caméra non disponible. Ouvrez la page en HTTPS dans Chrome ou Safari.',
+      cameraDenied: "Accès à la caméra refusé. Autorisez la caméra dans les réglages du navigateur.",
+      cameraError: 'Erreur caméra : {e}', cameraLost: 'La caméra a été coupée. Relancez le scan.',
+      torchFail: "Impossible d'allumer la lampe", torchUnsupported: 'Lampe non pilotable sur cet appareil',
+      saveFail: "Impossible d'enregistrer la photo (stockage plein ou navigation privée ?)",
+      storageFail: 'Stockage des photos indisponible (navigation privée ?)',
+      photoManual: 'Photo manuelle', photoPoints: '{n} point(s) suspect(s) — {m}',
+      modeNameReflect: "reflet d'objectif", modeNameIR: 'infrarouge', auto: '(auto)', language: 'Langue',
+      guideTitle: 'Comment scanner une pièce',
+      guide: [
+        "<b>Mode « Reflet d'objectif »</b> : baissez la lumière, allumez la lampe 🔦. Les lentilles de caméra renvoient la lumière comme un petit point brillant. Balayez <b>lentement</b> murs, plafond, étagères, jouets, miroirs, détecteurs de fumée, prises, chargeurs, réveils, cadres…",
+        "Tenez le téléphone à la <b>hauteur de vos yeux</b> : le reflet est plus fort quand la lampe et la caméra sont alignées avec l'objectif.",
+        "<b>Mode « Infrarouge »</b> : éteignez toutes les lumières. Les caméras de vision nocturne ont des LED infrarouges invisibles à l'œil mais visibles par le téléphone (points violets/blancs). Astuce : touchez 🔄 pour utiliser la caméra <b>avant</b>, qui voit souvent mieux l'infrarouge.",
+        "Quand un point brillant reste visible plusieurs images de suite, un cercle rouge apparaît et une <b>photo est prise automatiquement</b>.",
+        "<b>Micros</b> : un micro ne se voit pas à la caméra. Utilisez le détecteur magnétique en approchant le téléphone des objets suspects, et vérifiez à la main les petits trous suspects.",
+        "<b>Miroir sans tain</b> : posez le bout du doigt sur le miroir. S'il n'y a <b>aucun espace</b> entre le doigt et son reflet, éclairez-le avec la lampe collée au verre pour voir s'il y a quelque chose derrière."
+      ],
+      warn: "<b>⚠️ Limites :</b> aucune application ne peut garantir de trouver 100 % des caméras ou micros. Il peut y avoir de fausses alertes (vis brillantes, bijoux, gouttes d'eau, LED d'appareils). Vérifiez toujours chaque alerte à l'œil. En cas de doute sérieux, contactez la police ou un professionnel."
+    },
+    en: {
+      _name: 'English',
+      title: 'Camera & Mic Detector',
+      tabScan: 'Scan', tabPhotos: 'Photos', tabGuide: 'Guide',
+      statusIdle: 'Tap “Start scan”',
+      start: '▶ Start scan', stop: '⏹ Stop', torch: '🔦 Light', photo: '📷 Photo', switchCam: '🔄 Camera',
+      mode: 'Mode', modeReflect: 'Lens reflection (light on)', modeIR: 'Infrared (dark room)',
+      sensitivity: 'Sensitivity',
+      autoShot: 'Take a photo automatically when a camera is suspected', sound: 'Beep + vibration',
+      magTitle: '🧲 Magnetic detector (microphones, electronics)',
+      magInit: 'The magnetometer will start with the scan if your phone allows it.',
+      magHint: 'Hold the phone 2–5 cm from objects: a strong rise may indicate a hidden microphone, battery or electronic circuit.',
+      magNotSupported: 'The magnetometer is not available in the browser on this device. On Android/Chrome: chrome://flags → “Generic Sensor Extra Classes” → Enabled.',
+      magUnavailable: 'Magnetometer unavailable: {e}',
+      magField: 'Field: {v} µT • change: {d} µT', magWarn: ' ⚠️ electronics/metal nearby!',
+      photosTitle: 'Detection photos', clearAll: '🗑 Delete all',
+      photosHint: 'Photos stay on your phone (nothing is sent to the Internet). Tap “Save” to keep them in your files.',
+      noPhotos: 'No photos yet.', save: '💾 Save', share: '📤 Share', confirmClear: 'Delete all photos?',
+      scanning: 'Scanning… move slowly', nothing: 'Scanning… nothing suspicious',
+      noisy: 'Too many reflections here (shiny surface) — change the angle',
+      alertLens: 'Suspected camera lens!', alertIR: 'Suspected infrared LED!', stopped: 'Scan stopped',
+      noCamera: 'Camera not available. Open the page over HTTPS in Chrome or Safari.',
+      cameraDenied: 'Camera access denied. Allow the camera in your browser settings.',
+      cameraError: 'Camera error: {e}', cameraLost: 'The camera was turned off. Start the scan again.',
+      torchFail: 'Could not turn on the light', torchUnsupported: 'Light cannot be controlled on this device',
+      saveFail: 'Could not save the photo (storage full or private browsing?)',
+      storageFail: 'Photo storage unavailable (private browsing?)',
+      photoManual: 'Manual photo', photoPoints: '{n} suspicious point(s) — {m}',
+      modeNameReflect: 'lens reflection', modeNameIR: 'infrared', auto: '(auto)', language: 'Language',
+      guideTitle: 'How to scan a room',
+      guide: [
+        '<b>“Lens reflection” mode</b>: dim the lights and turn on the light 🔦. Camera lenses reflect light back as a small bright dot. <b>Slowly</b> sweep walls, ceiling, shelves, toys, mirrors, smoke detectors, sockets, chargers, clocks, picture frames…',
+        'Hold the phone at <b>eye level</b>: the reflection is strongest when the light and the camera are lined up with the lens.',
+        '<b>“Infrared” mode</b>: turn off all lights. Night-vision cameras have infrared LEDs that are invisible to the eye but visible to the phone (purple/white dots). Tip: tap 🔄 to use the <b>front</b> camera, which often sees infrared better.',
+        'When a bright dot stays visible for several frames, a red circle appears and a <b>photo is taken automatically</b>.',
+        '<b>Microphones</b>: a microphone cannot be seen by the camera. Use the magnetic detector by holding the phone close to suspicious objects, and check small suspicious holes by hand.',
+        '<b>Two-way mirror</b>: touch the mirror with your fingertip. If there is <b>no gap</b> between your finger and its reflection, press the light against the glass to see if something is behind it.'
+      ],
+      warn: '<b>⚠️ Limits:</b> no app can guarantee finding 100% of cameras or microphones. False alarms can happen (shiny screws, jewellery, water drops, device LEDs). Always check each alert with your own eyes. If you have serious doubts, contact the police or a professional.'
+    },
+    de: {
+      _name: 'Deutsch',
+      title: 'Kamera- & Mikrofon-Detektor',
+      tabScan: 'Scannen', tabPhotos: 'Fotos', tabGuide: 'Anleitung',
+      statusIdle: 'Tippen Sie auf „Scan starten“',
+      start: '▶ Scan starten', stop: '⏹ Stopp', torch: '🔦 Licht', photo: '📷 Foto', switchCam: '🔄 Kamera',
+      mode: 'Modus', modeReflect: 'Linsenreflexion (Licht an)', modeIR: 'Infrarot (dunkler Raum)',
+      sensitivity: 'Empfindlichkeit',
+      autoShot: 'Automatisch ein Foto machen, wenn eine Kamera vermutet wird', sound: 'Piepton + Vibration',
+      magTitle: '🧲 Magnetdetektor (Mikrofone, Elektronik)',
+      magInit: 'Das Magnetometer startet mit dem Scan, wenn Ihr Handy es erlaubt.',
+      magHint: 'Halten Sie das Handy 2–5 cm vor Gegenstände: Ein starker Anstieg kann auf ein verstecktes Mikrofon, einen Akku oder eine Elektronik hinweisen.',
+      magNotSupported: 'Das Magnetometer ist im Browser dieses Geräts nicht verfügbar. Unter Android/Chrome: chrome://flags → „Generic Sensor Extra Classes“ → Enabled.',
+      magUnavailable: 'Magnetometer nicht verfügbar: {e}',
+      magField: 'Feld: {v} µT • Abweichung: {d} µT', magWarn: ' ⚠️ Elektronik/Metall in der Nähe!',
+      photosTitle: 'Fotos der Funde', clearAll: '🗑 Alle löschen',
+      photosHint: 'Die Fotos bleiben auf Ihrem Handy (nichts wird ins Internet gesendet). Tippen Sie auf „Speichern“, um sie in Ihren Dateien zu behalten.',
+      noPhotos: 'Noch keine Fotos.', save: '💾 Speichern', share: '📤 Teilen', confirmClear: 'Alle Fotos löschen?',
+      scanning: 'Scan läuft… langsam bewegen', nothing: 'Scan läuft… nichts Verdächtiges',
+      noisy: 'Zu viele Reflexionen hier (glänzende Fläche) — Winkel ändern',
+      alertLens: 'Verdächtige Kameralinse!', alertIR: 'Verdächtige Infrarot-LED!', stopped: 'Scan gestoppt',
+      noCamera: 'Kamera nicht verfügbar. Öffnen Sie die Seite über HTTPS in Chrome oder Safari.',
+      cameraDenied: 'Kamerazugriff verweigert. Erlauben Sie die Kamera in den Browser-Einstellungen.',
+      cameraError: 'Kamerafehler: {e}', cameraLost: 'Die Kamera wurde beendet. Starten Sie den Scan erneut.',
+      torchFail: 'Licht konnte nicht eingeschaltet werden', torchUnsupported: 'Licht auf diesem Gerät nicht steuerbar',
+      saveFail: 'Foto konnte nicht gespeichert werden (Speicher voll oder privates Surfen?)',
+      storageFail: 'Fotospeicher nicht verfügbar (privates Surfen?)',
+      photoManual: 'Manuelles Foto', photoPoints: '{n} verdächtige(r) Punkt(e) — {m}',
+      modeNameReflect: 'Linsenreflexion', modeNameIR: 'Infrarot', auto: '(auto)', language: 'Sprache',
+      guideTitle: 'So scannen Sie einen Raum',
+      guide: [
+        '<b>Modus „Linsenreflexion“</b>: Licht dimmen, Lampe 🔦 einschalten. Kameralinsen werfen das Licht als kleinen hellen Punkt zurück. Wände, Decke, Regale, Spielzeug, Spiegel, Rauchmelder, Steckdosen, Ladegeräte, Wecker, Bilderrahmen <b>langsam</b> abscannen…',
+        'Halten Sie das Handy auf <b>Augenhöhe</b>: Die Reflexion ist am stärksten, wenn Licht und Kamera auf die Linse ausgerichtet sind.',
+        '<b>Modus „Infrarot“</b>: Alle Lichter ausschalten. Nachtsichtkameras haben Infrarot-LEDs, die für das Auge unsichtbar, für das Handy aber sichtbar sind (violette/weiße Punkte). Tipp: Tippen Sie auf 🔄, um die <b>Frontkamera</b> zu nutzen, die Infrarot oft besser sieht.',
+        'Bleibt ein heller Punkt mehrere Bilder lang sichtbar, erscheint ein roter Kreis und ein <b>Foto wird automatisch aufgenommen</b>.',
+        '<b>Mikrofone</b>: Ein Mikrofon ist für die Kamera nicht sichtbar. Nutzen Sie den Magnetdetektor, indem Sie das Handy nah an verdächtige Gegenstände halten, und prüfen Sie kleine verdächtige Löcher von Hand.',
+        '<b>Spionspiegel</b>: Legen Sie die Fingerspitze auf den Spiegel. Gibt es <b>keinen Abstand</b> zwischen Finger und Spiegelbild, halten Sie die Lampe direkt ans Glas, um zu sehen, ob sich etwas dahinter befindet.'
+      ],
+      warn: '<b>⚠️ Grenzen:</b> Keine App kann garantieren, 100 % der Kameras oder Mikrofone zu finden. Fehlalarme sind möglich (glänzende Schrauben, Schmuck, Wassertropfen, Geräte-LEDs). Prüfen Sie jeden Alarm immer mit eigenen Augen. Bei ernsthaftem Verdacht wenden Sie sich an die Polizei oder einen Fachmann.'
+    },
+    es: {
+      _name: 'Español',
+      title: 'Detector de Cámaras y Micrófonos',
+      tabScan: 'Escanear', tabPhotos: 'Fotos', tabGuide: 'Guía',
+      statusIdle: 'Pulse «Iniciar escaneo»',
+      start: '▶ Iniciar escaneo', stop: '⏹ Detener', torch: '🔦 Linterna', photo: '📷 Foto', switchCam: '🔄 Cámara',
+      mode: 'Modo', modeReflect: 'Reflejo de lente (linterna encendida)', modeIR: 'Infrarrojo (habitación a oscuras)',
+      sensitivity: 'Sensibilidad',
+      autoShot: 'Tomar una foto automáticamente al sospechar una cámara', sound: 'Pitido + vibración',
+      magTitle: '🧲 Detector magnético (micrófonos, electrónica)',
+      magInit: 'El magnetómetro se activará al iniciar el escaneo si su teléfono lo permite.',
+      magHint: 'Acerque el teléfono a 2–5 cm de los objetos: una subida fuerte puede indicar un micrófono, una batería o un circuito electrónico oculto.',
+      magNotSupported: 'El magnetómetro no está disponible en el navegador de este dispositivo. En Android/Chrome: chrome://flags → «Generic Sensor Extra Classes» → Enabled.',
+      magUnavailable: 'Magnetómetro no disponible: {e}',
+      magField: 'Campo: {v} µT • diferencia: {d} µT', magWarn: ' ⚠️ ¡electrónica/metal cerca!',
+      photosTitle: 'Fotos de las detecciones', clearAll: '🗑 Borrar todo',
+      photosHint: 'Las fotos se quedan en su teléfono (no se envía nada a Internet). Pulse «Guardar» para conservarlas en sus archivos.',
+      noPhotos: 'Todavía no hay fotos.', save: '💾 Guardar', share: '📤 Compartir', confirmClear: '¿Borrar todas las fotos?',
+      scanning: 'Escaneando… muévase despacio', nothing: 'Escaneando… nada sospechoso',
+      noisy: 'Demasiados reflejos aquí (superficie brillante): cambie el ángulo',
+      alertLens: '¡Posible lente de cámara!', alertIR: '¡Posible LED infrarrojo!', stopped: 'Escaneo detenido',
+      noCamera: 'Cámara no disponible. Abra la página con HTTPS en Chrome o Safari.',
+      cameraDenied: 'Acceso a la cámara denegado. Permita la cámara en los ajustes del navegador.',
+      cameraError: 'Error de cámara: {e}', cameraLost: 'La cámara se ha apagado. Inicie el escaneo de nuevo.',
+      torchFail: 'No se pudo encender la linterna', torchUnsupported: 'La linterna no se puede controlar en este dispositivo',
+      saveFail: 'No se pudo guardar la foto (¿almacenamiento lleno o navegación privada?)',
+      storageFail: 'Almacenamiento de fotos no disponible (¿navegación privada?)',
+      photoManual: 'Foto manual', photoPoints: '{n} punto(s) sospechoso(s) — {m}',
+      modeNameReflect: 'reflejo de lente', modeNameIR: 'infrarrojo', auto: '(auto)', language: 'Idioma',
+      guideTitle: 'Cómo escanear una habitación',
+      guide: [
+        '<b>Modo «Reflejo de lente»</b>: baje la luz y encienda la linterna 🔦. Las lentes de las cámaras devuelven la luz como un pequeño punto brillante. Recorra <b>despacio</b> paredes, techo, estanterías, juguetes, espejos, detectores de humo, enchufes, cargadores, relojes, marcos…',
+        'Sostenga el teléfono a la <b>altura de los ojos</b>: el reflejo es más fuerte cuando la linterna y la cámara están alineadas con la lente.',
+        '<b>Modo «Infrarrojo»</b>: apague todas las luces. Las cámaras de visión nocturna tienen LED infrarrojos invisibles para el ojo pero visibles para el teléfono (puntos violetas/blancos). Consejo: pulse 🔄 para usar la cámara <b>frontal</b>, que a menudo ve mejor el infrarrojo.',
+        'Cuando un punto brillante permanece visible varias imágenes seguidas, aparece un círculo rojo y se <b>toma una foto automáticamente</b>.',
+        '<b>Micrófonos</b>: un micrófono no se ve con la cámara. Use el detector magnético acercando el teléfono a los objetos sospechosos y revise a mano los pequeños agujeros sospechosos.',
+        '<b>Espejo espía</b>: ponga la punta del dedo sobre el espejo. Si <b>no hay espacio</b> entre el dedo y su reflejo, apoye la linterna contra el cristal para ver si hay algo detrás.'
+      ],
+      warn: '<b>⚠️ Límites:</b> ninguna aplicación puede garantizar encontrar el 100 % de las cámaras o micrófonos. Puede haber falsas alarmas (tornillos brillantes, joyas, gotas de agua, LED de aparatos). Compruebe siempre cada alerta con sus propios ojos. Ante una duda seria, contacte con la policía o con un profesional.'
+    },
+    it: {
+      _name: 'Italiano',
+      title: 'Rilevatore di Telecamere e Microfoni',
+      tabScan: 'Scansione', tabPhotos: 'Foto', tabGuide: 'Guida',
+      statusIdle: 'Tocca «Avvia scansione»',
+      start: '▶ Avvia scansione', stop: '⏹ Ferma', torch: '🔦 Torcia', photo: '📷 Foto', switchCam: '🔄 Fotocamera',
+      mode: 'Modalità', modeReflect: 'Riflesso dell’obiettivo (torcia accesa)', modeIR: 'Infrarossi (stanza al buio)',
+      sensitivity: 'Sensibilità',
+      autoShot: 'Scatta una foto automaticamente quando si sospetta una telecamera', sound: 'Bip + vibrazione',
+      magTitle: '🧲 Rilevatore magnetico (microfoni, elettronica)',
+      magInit: 'Il magnetometro si attiverà con la scansione se il telefono lo consente.',
+      magHint: 'Avvicina il telefono a 2–5 cm dagli oggetti: un forte aumento può indicare un microfono, una batteria o un circuito elettronico nascosto.',
+      magNotSupported: 'Il magnetometro non è disponibile nel browser di questo dispositivo. Su Android/Chrome: chrome://flags → «Generic Sensor Extra Classes» → Enabled.',
+      magUnavailable: 'Magnetometro non disponibile: {e}',
+      magField: 'Campo: {v} µT • scarto: {d} µT', magWarn: ' ⚠️ elettronica/metallo vicino!',
+      photosTitle: 'Foto dei rilevamenti', clearAll: '🗑 Elimina tutto',
+      photosHint: 'Le foto restano sul telefono (nulla viene inviato su Internet). Tocca «Salva» per conservarle nei tuoi file.',
+      noPhotos: 'Nessuna foto per ora.', save: '💾 Salva', share: '📤 Condividi', confirmClear: 'Eliminare tutte le foto?',
+      scanning: 'Scansione in corso… muoviti lentamente', nothing: 'Scansione in corso… niente di sospetto',
+      noisy: 'Troppi riflessi qui (superficie lucida): cambia angolazione',
+      alertLens: 'Possibile obiettivo di telecamera!', alertIR: 'Possibile LED a infrarossi!', stopped: 'Scansione fermata',
+      noCamera: 'Fotocamera non disponibile. Apri la pagina in HTTPS con Chrome o Safari.',
+      cameraDenied: 'Accesso alla fotocamera negato. Consenti la fotocamera nelle impostazioni del browser.',
+      cameraError: 'Errore fotocamera: {e}', cameraLost: 'La fotocamera è stata spenta. Riavvia la scansione.',
+      torchFail: 'Impossibile accendere la torcia', torchUnsupported: 'Torcia non controllabile su questo dispositivo',
+      saveFail: 'Impossibile salvare la foto (memoria piena o navigazione privata?)',
+      storageFail: 'Archivio foto non disponibile (navigazione privata?)',
+      photoManual: 'Foto manuale', photoPoints: '{n} punto/i sospetto/i — {m}',
+      modeNameReflect: 'riflesso dell’obiettivo', modeNameIR: 'infrarossi', auto: '(auto)', language: 'Lingua',
+      guideTitle: 'Come scansionare una stanza',
+      guide: [
+        '<b>Modalità «Riflesso dell’obiettivo»</b>: abbassa le luci e accendi la torcia 🔦. Gli obiettivi delle telecamere riflettono la luce come un piccolo punto luminoso. Passa <b>lentamente</b> su pareti, soffitto, scaffali, giocattoli, specchi, rilevatori di fumo, prese, caricatori, sveglie, cornici…',
+        'Tieni il telefono all’<b>altezza degli occhi</b>: il riflesso è più forte quando torcia e fotocamera sono allineate con l’obiettivo.',
+        '<b>Modalità «Infrarossi»</b>: spegni tutte le luci. Le telecamere a visione notturna hanno LED a infrarossi invisibili all’occhio ma visibili al telefono (punti viola/bianchi). Suggerimento: tocca 🔄 per usare la fotocamera <b>anteriore</b>, che spesso vede meglio gli infrarossi.',
+        'Quando un punto luminoso resta visibile per diversi fotogrammi, appare un cerchio rosso e viene <b>scattata automaticamente una foto</b>.',
+        '<b>Microfoni</b>: un microfono non si vede con la fotocamera. Usa il rilevatore magnetico avvicinando il telefono agli oggetti sospetti e controlla a mano i piccoli fori sospetti.',
+        '<b>Specchio spia</b>: appoggia la punta del dito sullo specchio. Se <b>non c’è spazio</b> tra il dito e il suo riflesso, appoggia la torcia al vetro per vedere se c’è qualcosa dietro.'
+      ],
+      warn: '<b>⚠️ Limiti:</b> nessuna app può garantire di trovare il 100% delle telecamere o dei microfoni. Possono esserci falsi allarmi (viti lucide, gioielli, gocce d’acqua, LED di apparecchi). Verifica sempre ogni allarme con i tuoi occhi. In caso di serio dubbio, contatta la polizia o un professionista.'
+    },
+    pt: {
+      _name: 'Português',
+      title: 'Detetor de Câmaras e Microfones',
+      tabScan: 'Analisar', tabPhotos: 'Fotos', tabGuide: 'Guia',
+      statusIdle: 'Toque em «Iniciar análise»',
+      start: '▶ Iniciar análise', stop: '⏹ Parar', torch: '🔦 Lanterna', photo: '📷 Foto', switchCam: '🔄 Câmara',
+      mode: 'Modo', modeReflect: 'Reflexo da lente (lanterna ligada)', modeIR: 'Infravermelho (divisão às escuras)',
+      sensitivity: 'Sensibilidade',
+      autoShot: 'Tirar uma foto automaticamente quando houver suspeita de câmara', sound: 'Bip + vibração',
+      magTitle: '🧲 Detetor magnético (microfones, eletrónica)',
+      magInit: 'O magnetómetro será ativado ao iniciar a análise, se o telemóvel o permitir.',
+      magHint: 'Aproxime o telemóvel a 2–5 cm dos objetos: um aumento forte pode indicar um microfone, uma bateria ou um circuito eletrónico escondido.',
+      magNotSupported: 'O magnetómetro não está disponível no navegador deste aparelho. No Android/Chrome: chrome://flags → «Generic Sensor Extra Classes» → Enabled.',
+      magUnavailable: 'Magnetómetro indisponível: {e}',
+      magField: 'Campo: {v} µT • diferença: {d} µT', magWarn: ' ⚠️ eletrónica/metal perto!',
+      photosTitle: 'Fotos das deteções', clearAll: '🗑 Apagar tudo',
+      photosHint: 'As fotos ficam no seu telemóvel (nada é enviado para a Internet). Toque em «Guardar» para as manter nos seus ficheiros.',
+      noPhotos: 'Ainda não há fotos.', save: '💾 Guardar', share: '📤 Partilhar', confirmClear: 'Apagar todas as fotos?',
+      scanning: 'A analisar… mova devagar', nothing: 'A analisar… nada suspeito',
+      noisy: 'Demasiados reflexos aqui (superfície brilhante) — mude o ângulo',
+      alertLens: 'Possível lente de câmara!', alertIR: 'Possível LED infravermelho!', stopped: 'Análise parada',
+      noCamera: 'Câmara indisponível. Abra a página em HTTPS no Chrome ou no Safari.',
+      cameraDenied: 'Acesso à câmara recusado. Permita a câmara nas definições do navegador.',
+      cameraError: 'Erro da câmara: {e}', cameraLost: 'A câmara foi desligada. Inicie a análise novamente.',
+      torchFail: 'Não foi possível ligar a lanterna', torchUnsupported: 'A lanterna não pode ser controlada neste aparelho',
+      saveFail: 'Não foi possível guardar a foto (armazenamento cheio ou navegação privada?)',
+      storageFail: 'Armazenamento de fotos indisponível (navegação privada?)',
+      photoManual: 'Foto manual', photoPoints: '{n} ponto(s) suspeito(s) — {m}',
+      modeNameReflect: 'reflexo da lente', modeNameIR: 'infravermelho', auto: '(auto)', language: 'Idioma',
+      guideTitle: 'Como analisar uma divisão',
+      guide: [
+        '<b>Modo «Reflexo da lente»</b>: baixe a luz e ligue a lanterna 🔦. As lentes das câmaras devolvem a luz como um pequeno ponto brilhante. Percorra <b>devagar</b> paredes, teto, prateleiras, brinquedos, espelhos, detetores de fumo, tomadas, carregadores, despertadores, molduras…',
+        'Segure o telemóvel à <b>altura dos olhos</b>: o reflexo é mais forte quando a lanterna e a câmara estão alinhadas com a lente.',
+        '<b>Modo «Infravermelho»</b>: apague todas as luzes. As câmaras de visão noturna têm LED infravermelhos invisíveis ao olho, mas visíveis para o telemóvel (pontos roxos/brancos). Dica: toque em 🔄 para usar a câmara <b>frontal</b>, que muitas vezes vê melhor o infravermelho.',
+        'Quando um ponto brilhante fica visível durante várias imagens seguidas, aparece um círculo vermelho e é <b>tirada uma foto automaticamente</b>.',
+        '<b>Microfones</b>: um microfone não se vê com a câmara. Use o detetor magnético aproximando o telemóvel dos objetos suspeitos e verifique à mão os pequenos furos suspeitos.',
+        '<b>Espelho espião</b>: encoste a ponta do dedo ao espelho. Se <b>não houver espaço</b> entre o dedo e o reflexo, encoste a lanterna ao vidro para ver se há algo atrás.'
+      ],
+      warn: '<b>⚠️ Limites:</b> nenhuma aplicação pode garantir encontrar 100% das câmaras ou microfones. Podem ocorrer falsos alarmes (parafusos brilhantes, joias, gotas de água, LED de aparelhos). Verifique sempre cada alerta com os seus próprios olhos. Em caso de dúvida séria, contacte a polícia ou um profissional.'
+    },
+    tr: {
+      _name: 'Türkçe',
+      title: 'Kamera ve Mikrofon Dedektörü',
+      tabScan: 'Tara', tabPhotos: 'Fotoğraflar', tabGuide: 'Rehber',
+      statusIdle: '“Taramayı başlat”a dokunun',
+      start: '▶ Taramayı başlat', stop: '⏹ Durdur', torch: '🔦 Fener', photo: '📷 Fotoğraf', switchCam: '🔄 Kamera',
+      mode: 'Mod', modeReflect: 'Lens yansıması (fener açık)', modeIR: 'Kızılötesi (karanlık oda)',
+      sensitivity: 'Hassasiyet',
+      autoShot: 'Kameradan şüphelenildiğinde otomatik fotoğraf çek', sound: 'Bip sesi + titreşim',
+      magTitle: '🧲 Manyetik dedektör (mikrofonlar, elektronik)',
+      magInit: 'Telefonunuz izin veriyorsa manyetometre taramayla birlikte başlar.',
+      magHint: 'Telefonu nesnelere 2–5 cm yaklaştırın: güçlü bir artış gizli bir mikrofon, pil veya elektronik devreye işaret edebilir.',
+      magNotSupported: 'Bu cihazda manyetometreye tarayıcıdan erişilemiyor. Android/Chrome: chrome://flags → “Generic Sensor Extra Classes” → Enabled.',
+      magUnavailable: 'Manyetometre kullanılamıyor: {e}',
+      magField: 'Alan: {v} µT • sapma: {d} µT', magWarn: ' ⚠️ yakında elektronik/metal var!',
+      photosTitle: 'Tespit fotoğrafları', clearAll: '🗑 Tümünü sil',
+      photosHint: 'Fotoğraflar telefonunuzda kalır (internete hiçbir şey gönderilmez). Dosyalarınızda saklamak için “Kaydet”e dokunun.',
+      noPhotos: 'Henüz fotoğraf yok.', save: '💾 Kaydet', share: '📤 Paylaş', confirmClear: 'Tüm fotoğraflar silinsin mi?',
+      scanning: 'Taranıyor… yavaşça hareket ettirin', nothing: 'Taranıyor… şüpheli bir şey yok',
+      noisy: 'Burada çok fazla yansıma var (parlak yüzey) — açıyı değiştirin',
+      alertLens: 'Şüpheli kamera lensi!', alertIR: 'Şüpheli kızılötesi LED!', stopped: 'Tarama durduruldu',
+      noCamera: 'Kamera kullanılamıyor. Sayfayı Chrome veya Safari’de HTTPS ile açın.',
+      cameraDenied: 'Kamera erişimi reddedildi. Tarayıcı ayarlarından kameraya izin verin.',
+      cameraError: 'Kamera hatası: {e}', cameraLost: 'Kamera kapandı. Taramayı yeniden başlatın.',
+      torchFail: 'Fener açılamadı', torchUnsupported: 'Bu cihazda fener kontrol edilemiyor',
+      saveFail: 'Fotoğraf kaydedilemedi (depolama dolu veya gizli gezinme?)',
+      storageFail: 'Fotoğraf depolama kullanılamıyor (gizli gezinme?)',
+      photoManual: 'Manuel fotoğraf', photoPoints: '{n} şüpheli nokta — {m}',
+      modeNameReflect: 'lens yansıması', modeNameIR: 'kızılötesi', auto: '(otomatik)', language: 'Dil',
+      guideTitle: 'Bir oda nasıl taranır',
+      guide: [
+        '<b>“Lens yansıması” modu</b>: ışıkları kısın ve feneri 🔦 açın. Kamera lensleri ışığı küçük parlak bir nokta olarak geri yansıtır. Duvarları, tavanı, rafları, oyuncakları, aynaları, duman dedektörlerini, prizleri, şarj cihazlarını, saatleri, çerçeveleri <b>yavaşça</b> tarayın…',
+        'Telefonu <b>göz hizasında</b> tutun: fener ve kamera lensle aynı hizadayken yansıma en güçlüdür.',
+        '<b>“Kızılötesi” modu</b>: tüm ışıkları kapatın. Gece görüşlü kameralarda gözle görülmeyen ama telefonun görebildiği kızılötesi LED’ler vardır (mor/beyaz noktalar). İpucu: kızılötesini genellikle daha iyi gören <b>ön</b> kamerayı kullanmak için 🔄’e dokunun.',
+        'Parlak bir nokta birkaç kare boyunca görünür kalırsa kırmızı bir daire belirir ve <b>otomatik olarak fotoğraf çekilir</b>.',
+        '<b>Mikrofonlar</b>: mikrofon kamerayla görülemez. Telefonu şüpheli nesnelere yaklaştırarak manyetik dedektörü kullanın ve küçük şüpheli delikleri elle kontrol edin.',
+        '<b>Casus ayna</b>: parmak ucunuzu aynaya dokundurun. Parmağınızla yansıması arasında <b>hiç boşluk yoksa</b>, arkasında bir şey olup olmadığını görmek için feneri cama dayayın.'
+      ],
+      warn: '<b>⚠️ Sınırlar:</b> hiçbir uygulama kameraların veya mikrofonların %100’ünü bulmayı garanti edemez. Yanlış alarmlar olabilir (parlak vidalar, takılar, su damlaları, cihaz LED’leri). Her uyarıyı mutlaka kendi gözünüzle kontrol edin. Ciddi şüpheniz varsa polise veya bir uzmana başvurun.'
+    },
+    ar: {
+      _name: 'العربية', _rtl: true,
+      title: 'كاشف الكاميرات والميكروفونات',
+      tabScan: 'فحص', tabPhotos: 'الصور', tabGuide: 'الدليل',
+      statusIdle: 'اضغط على «بدء الفحص»',
+      start: '▶ بدء الفحص', stop: '⏹ إيقاف', torch: '🔦 المصباح', photo: '📷 صورة', switchCam: '🔄 الكاميرا',
+      mode: 'الوضع', modeReflect: 'انعكاس العدسة (المصباح مضاء)', modeIR: 'الأشعة تحت الحمراء (غرفة مظلمة)',
+      sensitivity: 'الحساسية',
+      autoShot: 'التقاط صورة تلقائيًا عند الاشتباه بوجود كاميرا', sound: 'صفير + اهتزاز',
+      magTitle: '🧲 الكاشف المغناطيسي (ميكروفونات، إلكترونيات)',
+      magInit: 'سيبدأ مقياس المغناطيسية مع الفحص إذا كان هاتفك يسمح بذلك.',
+      magHint: 'قرّب الهاتف من الأشياء على بعد 2–5 سم: الارتفاع القوي قد يدل على ميكروفون أو بطارية أو دائرة إلكترونية مخفية.',
+      magNotSupported: 'مقياس المغناطيسية غير متاح في متصفح هذا الجهاز. على أندرويد/كروم: chrome://flags ← «Generic Sensor Extra Classes» ← Enabled.',
+      magUnavailable: 'مقياس المغناطيسية غير متاح: {e}',
+      magField: 'المجال: {v} µT • الفرق: {d} µT', magWarn: ' ⚠️ إلكترونيات/معدن قريب!',
+      photosTitle: 'صور الاكتشافات', clearAll: '🗑 حذف الكل',
+      photosHint: 'تبقى الصور على هاتفك (لا يُرسل أي شيء إلى الإنترنت). اضغط على «حفظ» للاحتفاظ بها في ملفاتك.',
+      noPhotos: 'لا توجد صور بعد.', save: '💾 حفظ', share: '📤 مشاركة', confirmClear: 'حذف جميع الصور؟',
+      scanning: 'جارٍ الفحص… تحرّك ببطء', nothing: 'جارٍ الفحص… لا شيء مريب',
+      noisy: 'انعكاسات كثيرة هنا (سطح لامع) — غيّر الزاوية',
+      alertLens: 'عدسة كاميرا مشتبه بها!', alertIR: 'مصباح أشعة تحت حمراء مشتبه به!', stopped: 'توقف الفحص',
+      noCamera: 'الكاميرا غير متاحة. افتح الصفحة عبر HTTPS في كروم أو سفاري.',
+      cameraDenied: 'تم رفض الوصول إلى الكاميرا. اسمح بالكاميرا في إعدادات المتصفح.',
+      cameraError: 'خطأ في الكاميرا: {e}', cameraLost: 'تم إيقاف الكاميرا. أعد بدء الفحص.',
+      torchFail: 'تعذّر تشغيل المصباح', torchUnsupported: 'لا يمكن التحكم بالمصباح على هذا الجهاز',
+      saveFail: 'تعذّر حفظ الصورة (الذاكرة ممتلئة أو تصفح خاص؟)',
+      storageFail: 'تخزين الصور غير متاح (تصفح خاص؟)',
+      photoManual: 'صورة يدوية', photoPoints: '{n} نقطة مشتبه بها — {m}',
+      modeNameReflect: 'انعكاس العدسة', modeNameIR: 'أشعة تحت حمراء', auto: '(تلقائي)', language: 'اللغة',
+      guideTitle: 'كيف تفحص غرفة',
+      guide: [
+        '<b>وضع «انعكاس العدسة»</b>: خفّف الإضاءة وشغّل المصباح 🔦. تعكس عدسات الكاميرات الضوء على شكل نقطة لامعة صغيرة. مرّر الهاتف <b>ببطء</b> على الجدران والسقف والرفوف والألعاب والمرايا وكواشف الدخان والمقابس والشواحن والساعات والإطارات…',
+        'أمسك الهاتف <b>بمستوى عينيك</b>: يكون الانعكاس أقوى عندما يكون المصباح والكاميرا على خط واحد مع العدسة.',
+        '<b>وضع «الأشعة تحت الحمراء»</b>: أطفئ جميع الأضواء. لكاميرات الرؤية الليلية مصابيح أشعة تحت حمراء لا تراها العين لكن يراها الهاتف (نقاط بنفسجية/بيضاء). نصيحة: اضغط على 🔄 لاستخدام الكاميرا <b>الأمامية</b> التي غالبًا ما ترى الأشعة تحت الحمراء بشكل أفضل.',
+        'عندما تبقى نقطة لامعة ظاهرة لعدة صور متتالية، تظهر دائرة حمراء و<b>تُلتقط صورة تلقائيًا</b>.',
+        '<b>الميكروفونات</b>: لا يمكن رؤية الميكروفون بالكاميرا. استخدم الكاشف المغناطيسي بتقريب الهاتف من الأشياء المشبوهة، وافحص الثقوب الصغيرة المشبوهة بيدك.',
+        '<b>المرآة ذات الاتجاهين</b>: ضع طرف إصبعك على المرآة. إذا <b>لم توجد مسافة</b> بين إصبعك وانعكاسه، ألصق المصباح بالزجاج لترى إن كان هناك شيء خلفه.'
+      ],
+      warn: '<b>⚠️ الحدود:</b> لا يمكن لأي تطبيق أن يضمن العثور على 100٪ من الكاميرات أو الميكروفونات. قد تحدث إنذارات خاطئة (براغٍ لامعة، مجوهرات، قطرات ماء، مصابيح أجهزة). تحقّق دائمًا من كل تنبيه بعينيك. إذا كان لديك شك جدي، اتصل بالشرطة أو بمختص.'
+    }
+  };
+
+  // Aide pour autoriser la caméra (un site web ne peut pas ouvrir les réglages lui-même).
+  const PERM = {
+    fr: {
+      permTitle: '📷 Autoriser la caméra',
+      permIntro: "Pour votre sécurité, aucune page web ne peut ouvrir elle-même les réglages. Suivez ces étapes, le scan démarrera tout seul dès que la caméra sera autorisée :",
+      permAndroid: ["En haut de Chrome, touchez l'icône à gauche de l'adresse (🔒 ou ⚙️).", "Touchez « Autorisations », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages du téléphone → Applications → Chrome → Autorisations → Caméra → Autoriser."],
+      permIOS: ["Dans Safari, touchez « aA » à gauche de l'adresse.", "Touchez « Réglages du site web », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages de l'iPhone → Safari → Caméra → Autoriser."],
+      permDesktop: ["Cliquez sur l'icône à gauche de l'adresse (🔒 ou ⓘ).", "À côté de « Caméra », choisissez « Autoriser ».", "Fermez les autres applications qui utilisent la webcam (Zoom, Teams…)."],
+      permFile: "La caméra est bloquée car l'application est ouverte comme un fichier. Sur téléphone, ouvrez-la depuis son adresse en ligne (https://…).",
+      retry: '🔄 Réessayer', close: 'Fermer', delete: 'Supprimer'
+    },
+    en: {
+      permTitle: '📷 Allow the camera',
+      permIntro: 'For your security, no web page can open the settings by itself. Follow these steps; the scan will start automatically as soon as the camera is allowed:',
+      permAndroid: ['At the top of Chrome, tap the icon to the left of the address (🔒 or ⚙️).', 'Tap “Permissions”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: phone Settings → Apps → Chrome → Permissions → Camera → Allow.'],
+      permIOS: ['In Safari, tap “aA” to the left of the address.', 'Tap “Website Settings”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: iPhone Settings → Safari → Camera → Allow.'],
+      permDesktop: ['Click the icon to the left of the address (🔒 or ⓘ).', 'Next to “Camera”, choose “Allow”.', 'Close other apps using the webcam (Zoom, Teams…).'],
+      permFile: 'The camera is blocked because the app was opened as a file. On a phone, open it from its online address (https://…).',
+      retry: '🔄 Try again', close: 'Close', delete: 'Delete'
+    },
+    de: {
+      permTitle: '📷 Kamera erlauben',
+      permIntro: 'Aus Sicherheitsgründen kann keine Webseite die Einstellungen selbst öffnen. Folgen Sie diesen Schritten – der Scan startet automatisch, sobald die Kamera erlaubt ist:',
+      permAndroid: ['Tippen Sie oben in Chrome auf das Symbol links neben der Adresse (🔒 oder ⚙️).', 'Tippen Sie auf „Berechtigungen“ und dann auf „Kamera“.', 'Wählen Sie „Zulassen“.', 'Falls es immer noch nicht geht: Handy-Einstellungen → Apps → Chrome → Berechtigungen → Kamera → Zulassen.'],
+      permIOS: ['Tippen Sie in Safari links neben der Adresse auf „aA“.', 'Tippen Sie auf „Website-Einstellungen“ und dann auf „Kamera“.', 'Wählen Sie „Erlauben“.', 'Falls es immer noch nicht geht: iPhone-Einstellungen → Safari → Kamera → Erlauben.'],
+      permDesktop: ['Klicken Sie auf das Symbol links neben der Adresse (🔒 oder ⓘ).', 'Wählen Sie neben „Kamera“ die Option „Zulassen“.', 'Schließen Sie andere Apps, die die Webcam nutzen (Zoom, Teams…).'],
+      permFile: 'Die Kamera ist blockiert, weil die App als Datei geöffnet wurde. Öffnen Sie sie auf dem Handy über ihre Online-Adresse (https://…).',
+      retry: '🔄 Erneut versuchen', close: 'Schließen', delete: 'Löschen'
+    },
+    es: {
+      permTitle: '📷 Permitir la cámara',
+      permIntro: 'Por su seguridad, ninguna página web puede abrir los ajustes por sí misma. Siga estos pasos; el escaneo empezará solo en cuanto se permita la cámara:',
+      permAndroid: ['En la parte superior de Chrome, toque el icono a la izquierda de la dirección (🔒 o ⚙️).', 'Toque «Permisos» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del teléfono → Aplicaciones → Chrome → Permisos → Cámara → Permitir.'],
+      permIOS: ['En Safari, toque «aA» a la izquierda de la dirección.', 'Toque «Ajustes del sitio web» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del iPhone → Safari → Cámara → Permitir.'],
+      permDesktop: ['Haga clic en el icono a la izquierda de la dirección (🔒 o ⓘ).', 'Junto a «Cámara», elija «Permitir».', 'Cierre otras aplicaciones que usen la webcam (Zoom, Teams…).'],
+      permFile: 'La cámara está bloqueada porque la aplicación se abrió como archivo. En el teléfono, ábrala desde su dirección en línea (https://…).',
+      retry: '🔄 Reintentar', close: 'Cerrar', delete: 'Eliminar'
+    },
+    it: {
+      permTitle: '📷 Consenti la fotocamera',
+      permIntro: 'Per la tua sicurezza, nessuna pagina web può aprire da sola le impostazioni. Segui questi passaggi: la scansione partirà da sola appena la fotocamera sarà consentita:',
+      permAndroid: ['In alto in Chrome, tocca l’icona a sinistra dell’indirizzo (🔒 o ⚙️).', 'Tocca «Autorizzazioni», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni del telefono → App → Chrome → Autorizzazioni → Fotocamera → Consenti.'],
+      permIOS: ['In Safari, tocca «aA» a sinistra dell’indirizzo.', 'Tocca «Impostazioni sito web», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni iPhone → Safari → Fotocamera → Consenti.'],
+      permDesktop: ['Fai clic sull’icona a sinistra dell’indirizzo (🔒 o ⓘ).', 'Accanto a «Fotocamera», scegli «Consenti».', 'Chiudi le altre app che usano la webcam (Zoom, Teams…).'],
+      permFile: 'La fotocamera è bloccata perché l’app è stata aperta come file. Sul telefono, aprila dal suo indirizzo online (https://…).',
+      retry: '🔄 Riprova', close: 'Chiudi', delete: 'Elimina'
+    },
+    pt: {
+      permTitle: '📷 Permitir a câmara',
+      permIntro: 'Por segurança, nenhuma página web pode abrir as definições sozinha. Siga estes passos; a análise começa sozinha assim que a câmara for permitida:',
+      permAndroid: ['No topo do Chrome, toque no ícone à esquerda do endereço (🔒 ou ⚙️).', 'Toque em «Autorizações» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do telemóvel → Aplicações → Chrome → Autorizações → Câmara → Permitir.'],
+      permIOS: ['No Safari, toque em «aA» à esquerda do endereço.', 'Toque em «Definições do site» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do iPhone → Safari → Câmara → Permitir.'],
+      permDesktop: ['Clique no ícone à esquerda do endereço (🔒 ou ⓘ).', 'Ao lado de «Câmara», escolha «Permitir».', 'Feche outras aplicações que usem a webcam (Zoom, Teams…).'],
+      permFile: 'A câmara está bloqueada porque a aplicação foi aberta como ficheiro. No telemóvel, abra-a a partir do endereço online (https://…).',
+      retry: '🔄 Tentar novamente', close: 'Fechar', delete: 'Apagar'
+    },
+    tr: {
+      permTitle: '📷 Kameraya izin verin',
+      permIntro: 'Güvenliğiniz için hiçbir web sayfası ayarları kendi başına açamaz. Bu adımları izleyin; kameraya izin verilir verilmez tarama kendiliğinden başlar:',
+      permAndroid: ['Chrome’un üst kısmında adresin solundaki simgeye (🔒 veya ⚙️) dokunun.', '“İzinler”e, ardından “Kamera”ya dokunun.', '“İzin ver”i seçin.', 'Hâlâ çalışmıyorsa: Telefon Ayarları → Uygulamalar → Chrome → İzinler → Kamera → İzin ver.'],
+      permIOS: ['Safari’de adresin solundaki “aA”ya dokunun.', '“Web Sitesi Ayarları”na, ardından “Kamera”ya dokunun.', '“İzin Ver”i seçin.', 'Hâlâ çalışmıyorsa: iPhone Ayarları → Safari → Kamera → İzin Ver.'],
+      permDesktop: ['Adresin solundaki simgeye (🔒 veya ⓘ) tıklayın.', '“Kamera”nın yanında “İzin ver”i seçin.', 'Web kamerasını kullanan diğer uygulamaları kapatın (Zoom, Teams…).'],
+      permFile: 'Uygulama dosya olarak açıldığı için kamera engellendi. Telefonda uygulamayı çevrimiçi adresinden (https://…) açın.',
+      retry: '🔄 Tekrar dene', close: 'Kapat', delete: 'Sil'
+    },
+    ar: {
+      permTitle: '📷 السماح بالكاميرا',
+      permIntro: 'لأسباب أمنية، لا يمكن لأي صفحة ويب فتح الإعدادات بنفسها. اتبع هذه الخطوات، وسيبدأ الفحص تلقائيًا بمجرد السماح بالكاميرا:',
+      permAndroid: ['في أعلى كروم، اضغط على الرمز الموجود يسار العنوان (🔒 أو ⚙️).', 'اضغط على «الأذونات» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات الهاتف ← التطبيقات ← Chrome ← الأذونات ← الكاميرا ← السماح.'],
+      permIOS: ['في سفاري، اضغط على «aA» يسار العنوان.', 'اضغط على «إعدادات موقع الويب» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات iPhone ← Safari ← الكاميرا ← السماح.'],
+      permDesktop: ['انقر على الرمز الموجود يسار العنوان (🔒 أو ⓘ).', 'بجانب «الكاميرا»، اختر «السماح».', 'أغلق التطبيقات الأخرى التي تستخدم كاميرا الويب (Zoom وTeams…).'],
+      permFile: 'الكاميرا محظورة لأن التطبيق فُتح كملف. على الهاتف، افتحه من عنوانه على الإنترنت (https://…).',
+      retry: '🔄 إعادة المحاولة', close: 'إغلاق', delete: 'حذف'
+    }
+  };
+  for (const k in PERM) Object.assign(T[k], PERM[k]);
+
+  let lang = 'fr';
+  function detect() {
+    let saved = null;
+    try { saved = localStorage.getItem('lang'); } catch (e) {}
+    if (saved && T[saved]) return saved;
+    const prefs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'fr']);
+    for (const p of prefs) { const c = String(p).slice(0, 2).toLowerCase(); if (T[c]) return c; }
+    return 'en';
+  }
+  function t(key, vars) {
+    let s = (T[lang] && T[lang][key] != null) ? T[lang][key] : (T.en[key] != null ? T.en[key] : key);
+    if (vars && typeof s === 'string') s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    return s;
+  }
+  function apply() {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = T[lang]._rtl ? 'rtl' : 'ltr';
+    document.title = t('title');
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    const ol = document.getElementById('guideList');
+    if (ol) {
+      ol.innerHTML = '';
+      t('guide').forEach(h => { const li = document.createElement('li'); li.innerHTML = h; ol.appendChild(li); });
+    }
+    const w = document.getElementById('guideWarn');
+    if (w) w.innerHTML = t('warn');
+  }
+  function set(code) {
+    if (!T[code]) return;
+    lang = code;
+    try { localStorage.setItem('lang', code); } catch (e) {}
+    apply();
+    document.dispatchEvent(new CustomEvent('langchange'));
+  }
+  lang = detect();
+  root.I18N = { t, set, apply, get lang() { return lang; }, languages: Object.keys(T).map(k => ({ code: k, name: T[k]._name })), _T: T };
+})(this);
+</script>
+<script>
+// Détecteur d'objectifs de caméra (reflets) et de LED infrarouges.
+// Fonction pure : fonctionne sur un objet {data, width, height} (ImageData).
+(function (root) {
+  'use strict';
+
+  function analyze(img, opts) {
+    const o = Object.assign({ mode: 'reflet', sensitivity: 5 }, opts || {});
+    const { data, width: W, height: H } = img;
+    const N = W * H;
+    const lum = new Float32Array(N);
+    for (let i = 0, p = 0; i < N; i++, p += 4) {
+      lum[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    }
+
+    // Image intégrale pour calculer la luminosité moyenne autour de chaque pixel.
+    const integ = new Float64Array((W + 1) * (H + 1));
+    let sceneSum = 0;
+    for (let y = 0; y < H; y++) {
+      let row = 0;
+      for (let x = 0; x < W; x++) {
+        row += lum[y * W + x];
+        integ[(y + 1) * (W + 1) + x + 1] = integ[y * (W + 1) + x + 1] + row;
+      }
+      sceneSum += row;
+    }
+    const sceneMean = sceneSum / N;
+    const R = Math.max(4, Math.round(W / 40));
+    function localMean(x, y) {
+      const x0 = Math.max(0, x - R), y0 = Math.max(0, y - R);
+      const x1 = Math.min(W, x + R + 1), y1 = Math.min(H, y + R + 1);
+      const s = integ[y1 * (W + 1) + x1] - integ[y0 * (W + 1) + x1]
+              - integ[y1 * (W + 1) + x0] + integ[y0 * (W + 1) + x0];
+      return s / ((x1 - x0) * (y1 - y0));
+    }
+
+    // Sensibilité 1 (stricte) .. 10 (très sensible)
+    const s = Math.min(10, Math.max(1, o.sensitivity));
+    const minBright = o.mode === 'ir' ? 190 - s * 8 : 250 - s * 4;   // 182..110 / 246..210
+    const minContrast = o.mode === 'ir' ? 70 - s * 4 : 100 - s * 6;  // 66..30 / 94..40
+
+    const mask = new Uint8Array(N);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const L = lum[i];
+        if (L < minBright) continue;
+        if (L - localMean(x, y) < minContrast) continue;
+        if (o.mode === 'ir') {
+          const p = i * 4, r = data[p], g = data[p + 1], b = data[p + 2];
+          // Les LED infrarouges apparaissent violettes/roses ou blanches dans une pièce sombre.
+          const purple = b > g + 12 && r > g + 5;
+          const whiteInDark = sceneMean < 70 && L > 200;
+          if (!purple && !whiteInDark) continue;
+        }
+        mask[i] = 1;
+      }
+    }
+
+    // Allongement (rapport des axes de l'ellipse équivalente), indépendant de l'angle.
+    function elongation(n, sx, sy, sxx, syy, sxy) {
+      const mx = sx / n, my = sy / n;
+      const a = sxx / n - mx * mx + 1 / 12, c = syy / n - my * my + 1 / 12, b = sxy / n - mx * my;
+      const d = Math.sqrt(((a - c) / 2) ** 2 + b * b), m = (a + c) / 2;
+      return Math.sqrt((m + d) / Math.max(1e-6, m - d));
+    }
+    const halo = new Int32Array(N); let haloMark = 0; const hstack = new Int32Array(N);
+    function isolated(pi, peak, size) {
+      const px = pi % W, py = (pi / W) | 0;
+      const win = Math.max(6, size * 2 + 4);          // demi-taille de la fenêtre d'analyse
+      // Fond : moyenne d'un anneau autour du point.
+      const rin = size + 2, rout = size + 5;
+      let bsum = 0, bn = 0;
+      const ring = [];
+      for (let dy = -rout; dy <= rout; dy++) for (let dx = -rout; dx <= rout; dx++) {
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        if (m < rin) continue;
+        const x = px + dx, y = py + dy;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const v = lum[y * W + x]; bsum += v; bn++; ring.push(v);
+      }
+      if (!bn) return false;
+      const bg = bsum / bn;
+      const thr = bg + 0.5 * (peak - bg);
+      // Trop de pixels clairs dans l'anneau = structure lumineuse à côté (bord d'écran…).
+      let bright = 0; for (const v of ring) if (v >= thr) bright++;
+      if (bright / bn > 0.1) return false;
+      // Forme de la tache à mi-hauteur : doit rester petite, ronde et à l'intérieur de la fenêtre.
+      haloMark++;
+      let sp = 0, area = 0, minX = px, maxX = px, minY = py, maxY = py, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+      hstack[sp++] = pi; halo[pi] = haloMark;
+      while (sp) {
+        const i = hstack[--sp];
+        const x = i % W, y = (i / W) | 0;
+        if (Math.abs(x - px) >= win || Math.abs(y - py) >= win) return false; // déborde : grande forme
+        area++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x > 0 && halo[i - 1] !== haloMark && lum[i - 1] >= thr) { halo[i - 1] = haloMark; hstack[sp++] = i - 1; }
+        if (x < W - 1 && halo[i + 1] !== haloMark && lum[i + 1] >= thr) { halo[i + 1] = haloMark; hstack[sp++] = i + 1; }
+        if (y > 0 && halo[i - W] !== haloMark && lum[i - W] >= thr) { halo[i - W] = haloMark; hstack[sp++] = i - W; }
+        if (y < H - 1 && halo[i + W] !== haloMark && lum[i + W] >= thr) { halo[i + W] = haloMark; hstack[sp++] = i + W; }
+      }
+      const hw = maxX - minX + 1, hh = maxY - minY + 1;
+      if (Math.max(hw, hh) / Math.min(hw, hh) > 2.5) return false;          // allongé (tige, trait)
+      if (area >= 4 && elongation(area, sx, sy, sxx, syy, sxy) > 2) return false; // allongé en diagonale
+      if (area > Math.max(12, (size + 2) * (size + 2) * 2)) return false;     // trop grand
+      return true;
+    }
+
+    // Composantes connexes (taches lumineuses).
+    const maxArea = Math.max(12, Math.round((W * H) / 600));
+    const maxSide = Math.max(5, Math.round(W / 18));
+    const blobs = [];
+    const stack = new Int32Array(N);
+    for (let start = 0; start < N; start++) {
+      if (mask[start] !== 1) continue;
+      let sp = 0, area = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sumL = 0, peak = 0, peakIdx = start;
+      let minX = W, minY = H, maxX = 0, maxY = 0;
+      stack[sp++] = start; mask[start] = 2;
+      while (sp) {
+        const i = stack[--sp];
+        const x = i % W, y = (i / W) | 0;
+        area++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sumL += lum[i];
+        if (lum[i] > peak) { peak = lum[i]; peakIdx = i; }
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        const nb = [i - 1, i + 1, i - W, i + W];
+        for (let k = 0; k < 4; k++) {
+          const j = nb[k];
+          if (j < 0 || j >= N) continue;
+          if ((k === 0 && x === 0) || (k === 1 && x === W - 1)) continue;
+          if (mask[j] === 1) { mask[j] = 2; stack[sp++] = j; }
+        }
+      }
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      if (area < 1 || area > maxArea) continue;          // trop gros = lampe, fenêtre…
+      if (bw > maxSide || bh > maxSide) continue;
+      const aspect = Math.max(bw, bh) / Math.min(bw, bh);
+      if (aspect > 2.2) continue;                        // une lentille est ronde
+      const fill = area / (bw * bh);
+      if (area > 3 && fill < 0.35) continue;
+      // Test d'isolement : une lentille est un petit point SEUL dans une zone plus sombre.
+      // Un coin d'écran, un détail d'image ou un reflet sur une tige métallique fait partie
+      // d'une forme claire plus grande ou allongée -> rejeté.
+      if (area >= 4 && elongation(area, sx, sy, sxx, syy, sxy) > 2) continue; // allongé, quel que soit l'angle
+      if (!isolated(peakIdx, peak, Math.max(bw, bh))) continue;
+      const cx = sx / area, cy = sy / area;
+      const contrast = sumL / area - localMean(Math.round(cx), Math.round(cy));
+      const roundness = 1 / aspect;
+      const score = Math.min(1, (contrast / 160) * 0.6 + roundness * 0.25 + fill * 0.15);
+      blobs.push({ x: cx, y: cy, r: Math.max(bw, bh) / 2 + 1, area, contrast, score });
+    }
+
+    blobs.sort((a, b) => b.score - a.score);
+    // Beaucoup de taches = surface brillante/pailletée : on ne garde que les meilleures.
+    const noisy = blobs.length > 25;
+    return { blobs: blobs.slice(0, noisy ? 3 : 10), noisy, sceneMean };
+  }
+
+  // Suivi dans le temps : une vraie lentille reste visible plusieurs images de suite.
+  function Tracker(opts) {
+    this.minHits = (opts && opts.minHits) || 4;
+    this.maxDist = (opts && opts.maxDist) || 14;
+    this.tracks = [];
+    this.nextId = 1;
+  }
+  Tracker.prototype.update = function (blobs) {
+    const used = new Set();
+    for (const t of this.tracks) {
+      let best = -1, bestD = this.maxDist;
+      blobs.forEach((b, i) => {
+        if (used.has(i)) return;
+        const d = Math.hypot(b.x - t.x, b.y - t.y);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      if (best >= 0) {
+        const b = blobs[best]; used.add(best);
+        t.x = t.x * 0.5 + b.x * 0.5; t.y = t.y * 0.5 + b.y * 0.5;
+        t.r = b.r; t.score = b.score; t.hits++; t.miss = 0;
+      } else {
+        t.miss++;
+      }
+    }
+    this.tracks = this.tracks.filter(t => t.miss < 3);
+    blobs.forEach((b, i) => {
+      if (!used.has(i)) this.tracks.push({ id: this.nextId++, x: b.x, y: b.y, r: b.r, score: b.score, hits: 1, miss: 0, shot: false });
+    });
+    return this.tracks.filter(t => t.hits >= this.minHits && t.miss === 0);
+  };
+
+  const api = { analyze, Tracker };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Detector = api;
+})(this);
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const t = (k, v) => I18N.t(k, v);
+  const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
+  const statusEl = $('status');
+  const work = document.createElement('canvas');
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+  const PROC_W = 320;
+  const MIN_HITS = 4;
+
+  let stream = null, track = null, running = false, starting = false, torchOn = false;
+  let facing = 'environment';
+  let tracker = new Detector.Tracker({ minHits: MIN_HITS });
+  let lastShot = 0, lastAlert = 0, audioCtx = null;
+
+  // ---------- Langue ----------
+  const langSel = $('lang');
+  I18N.languages.forEach(l => { const o = document.createElement('option'); o.value = l.code; o.textContent = l.name; langSel.appendChild(o); });
+  langSel.value = I18N.lang;
+  langSel.addEventListener('change', () => I18N.set(langSel.value));
+  document.addEventListener('langchange', refreshTexts);
+
+  function refreshTexts() {
+    I18N.apply();
+    $('startBtn').textContent = t(running ? 'stop' : 'start');
+    renderStatus();
+    renderMag();
+    $('torchBtn').title = track && $('torchBtn').disabled ? t('torchUnsupported') : '';
+    if ($('photos').classList.contains('active')) renderGallery();
+  }
+
+  // ---------- Statut (mémorisé pour pouvoir changer de langue) ----------
+  let status = { key: 'statusIdle', cls: 'idle', vars: null }, holdUntil = 0;
+  function setStatus(key, cls, vars, holdMs) {
+    if (!holdMs && Date.now() < holdUntil) return; // un message important reste affiché un moment
+    status = { key, cls, vars: vars || null };
+    holdUntil = holdMs ? Date.now() + holdMs : 0;
+    renderStatus();
+  }
+  function renderStatus() {
+    let txt = t(status.key, status.vars);
+    statusEl.textContent = (status.cls === 'alert' && status.vars && status.vars.count ? '⚠️ ' + txt + ' (' + status.vars.count + ')' : txt);
+    statusEl.className = 'status ' + status.cls;
+  }
+
+  // ---------- Onglets ----------
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
+    if (b.dataset.tab === 'photos') renderGallery();
+  }));
+
+  $('sens').addEventListener('input', e => { $('sensVal').textContent = e.target.value; });
+  $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: MIN_HITS }); });
+
+  // ---------- Caméra ----------
+  async function openCamera() {
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    if (stream) stream.getTracks().forEach(x => x.stop());
+    stream = s;
+    track = stream.getVideoTracks()[0];
+    track.addEventListener('ended', () => { if (running) { stop(); setStatus('cameraLost', 'alert', null, 4000); } });
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) { /* autoplay : la vidéo démarrera quand même (muted + playsinline) */ }
+    torchOn = false;
+    $('torchBtn').classList.remove('on');
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    $('torchBtn').disabled = !caps.torch;
+    $('torchBtn').title = caps.torch ? '' : t('torchUnsupported');
+    tracker = new Detector.Tracker({ minHits: MIN_HITS });
+  }
+
+  // ---------- Aide « autoriser la caméra » ----------
+  // Un site web ne peut pas ouvrir les réglages du téléphone : on affiche les étapes exactes
+  // pour l'appareil, et le scan démarre tout seul dès que la caméra est autorisée.
+  const ua = navigator.userAgent || '';
+  const platform = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'ios'
+    : /Android/.test(ua) ? 'android' : 'desktop';
+  const isMobile = platform !== 'desktop';
+  function renderPermHelp() {
+    const ol = $('permSteps'); ol.innerHTML = '';
+    const steps = location.protocol === 'file:' && isMobile ? [t('permFile')]
+      : t(platform === 'ios' ? 'permIOS' : platform === 'android' ? 'permAndroid' : 'permDesktop');
+    steps.forEach(x => { const li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
+  }
+  function showPermHelp() { renderPermHelp(); $('permHelp').hidden = false; $('permRetry').focus(); }
+  function hidePermHelp() { $('permHelp').hidden = true; }
+  $('permRetry').onclick = () => { hidePermHelp(); start(); };
+  $('permClose').onclick = hidePermHelp;
+  document.addEventListener('langchange', () => { if (!$('permHelp').hidden) renderPermHelp(); });
+  // Dès que la caméra est autorisée dans les réglages, on démarre le scan automatiquement.
+  try {
+    navigator.permissions.query({ name: 'camera' }).then(ps => {
+      ps.onchange = () => { if (ps.state === 'granted' && !$('permHelp').hidden && !running) { hidePermHelp(); start(); } };
+    }).catch(() => {});
+  } catch (e) {}
+
+  async function start() {
+    if (starting) return;
+    if (running) { stop(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('noCamera', 'alert', null, 6000);
+      if (location.protocol === 'file:' || !window.isSecureContext) showPermHelp();
+      return;
+    }
+    starting = true;
+    initAudio();
+    try {
+      await openCamera();
+    } catch (err) {
+      starting = false;
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      setStatus(denied ? 'cameraDenied' : 'cameraError', 'alert', { e: (err && (err.message || err.name)) || '?' }, 6000);
+      showPermHelp();
+      return;
+    }
+    hidePermHelp();
+    starting = false;
+    running = true;
+    $('snapBtn').disabled = false;
+    $('switchBtn').disabled = false;
+    $('startBtn').textContent = t('stop');
+    startMagnetometer();
+    holdUntil = 0;
+    setStatus('scanning', 'ok');
+    requestAnimationFrame(loop);
+  }
+
+  function stop() {
+    running = false;
+    if (stream) stream.getTracks().forEach(x => x.stop());
+    stream = null; track = null; torchOn = false;
+    video.srcObject = null;
+    $('torchBtn').classList.remove('on');
+    ['torchBtn', 'snapBtn', 'switchBtn'].forEach(id => ($(id).disabled = true));
+    $('startBtn').textContent = t('start');
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    setStatus('stopped', 'idle');
+  }
+
+  async function switchCamera() {
+    if (!running) return;
+    facing = facing === 'environment' ? 'user' : 'environment';
+    try { await openCamera(); }
+    catch (err) { facing = facing === 'environment' ? 'user' : 'environment'; setStatus('cameraError', 'alert', { e: err.message || err.name }, 4000); }
+  }
+
+  async function toggleTorch() {
+    if (!track) return;
+    const want = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: want }] });
+      torchOn = want;
+      $('torchBtn').classList.toggle('on', torchOn);
+    } catch (e) { setStatus('torchFail', 'alert', null, 3000); }
+  }
+
+  // Couper la caméra quand l'application passe en arrière-plan (vie privée + batterie).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && running) stop();
+    // Retour depuis les réglages du téléphone : on réessaie tout seul.
+    else if (!document.hidden && !$('permHelp').hidden && !running) {
+      try {
+        navigator.permissions.query({ name: 'camera' }).then(ps => { if (ps.state === 'granted') { hidePermHelp(); start(); } }).catch(() => {});
+      } catch (e) {}
+    }
+  });
+
+  // ---------- Boucle d'analyse ----------
+  let lastProc = 0;
+  function loop(ts) {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    if (ts - lastProc < 66 || !video.videoWidth || video.readyState < 2) return; // ~15 analyses / seconde
+    lastProc = ts;
+
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const pw = PROC_W, ph = Math.round(PROC_W * vh / vw);
+    if (work.width !== pw || work.height !== ph) { work.width = pw; work.height = ph; tracker = new Detector.Tracker({ minHits: MIN_HITS }); }
+    wctx.drawImage(video, 0, 0, pw, ph);
+    let img;
+    try { img = wctx.getImageData(0, 0, pw, ph); } catch (e) { return; }
+    const mode = $('mode').value;
+    const res = Detector.analyze(img, { mode, sensitivity: +$('sens').value });
+    const confirmed = tracker.update(res.blobs);
+
+    drawOverlay(res.blobs, confirmed, pw, ph);
+
+    if (confirmed.length >= 4) {
+      // Beaucoup de points à la fois : écran, lustre ou surface brillante, pas des caméras.
+      setStatus('noisy', 'idle');
+    } else if (confirmed.length) {
+      setStatus(mode === 'ir' ? 'alertIR' : 'alertLens', 'alert', { count: confirmed.length });
+      const now = Date.now();
+      if ($('sound').checked && now - lastAlert > 1500) { beep(); vibrate(); lastAlert = now; }
+      const fresh = confirmed.filter(x => !x.shot);
+      if ($('autoShot').checked && fresh.length && now - lastShot > 4000) {
+        fresh.forEach(x => (x.shot = true));
+        takePhoto(confirmed, pw, true);
+        lastShot = now;
+      }
+    } else if (res.noisy) {
+      setStatus('noisy', 'idle');
+    } else {
+      setStatus('nothing', 'ok');
+    }
+  }
+
+  // Conversion coordonnées d'analyse -> écran (vidéo en object-fit: cover)
+  function mapper(pw, ph) {
+    const W = overlay.clientWidth, H = overlay.clientHeight;
+    const scale = Math.max(W / pw, H / ph);
+    const ox = (W - pw * scale) / 2, oy = (H - ph * scale) / 2;
+    return { W, H, scale, f: (x, y) => [ox + x * scale, oy + y * scale] };
+  }
+
+  function drawOverlay(blobs, confirmed, pw, ph) {
+    const dpr = window.devicePixelRatio || 1;
+    const m = mapper(pw, ph);
+    if (!m.W || !m.H) return;
+    const cw = Math.round(m.W * dpr), ch = Math.round(m.H * dpr);
+    if (overlay.width !== cw || overlay.height !== ch) { overlay.width = cw; overlay.height = ch; }
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, m.W, m.H);
+    octx.lineWidth = 2;
+    octx.strokeStyle = 'rgba(250,204,21,.8)';
+    for (const b of blobs) {
+      const [x, y] = m.f(b.x, b.y);
+      octx.beginPath(); octx.arc(x, y, Math.max(8, b.r * m.scale + 6), 0, Math.PI * 2); octx.stroke();
+    }
+    octx.lineWidth = 4; octx.strokeStyle = '#ef4444'; octx.fillStyle = '#ef4444';
+    octx.font = 'bold 14px system-ui';
+    octx.direction = 'ltr'; octx.textAlign = 'left';
+    for (const c of confirmed) {
+      const [x, y] = m.f(c.x, c.y);
+      const r = Math.max(16, c.r * m.scale + 14);
+      octx.beginPath(); octx.arc(x, y, r, 0, Math.PI * 2); octx.stroke();
+      octx.fillText(Math.round(c.score * 100) + '%', x + r + 4, y + 5);
+    }
+  }
+
+  // ---------- Photo ----------
+  function takePhoto(marks, pw, auto) {
+    if (!video.videoWidth) return;
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    marks = marks || [];
+    if (marks.length && pw) {
+      const k = c.width / pw;
+      ctx.lineWidth = Math.max(4, c.width / 200); ctx.strokeStyle = '#ef4444';
+      for (const m of marks) { ctx.beginPath(); ctx.arc(m.x * k, m.y * k, Math.max(30, m.r * k * 3), 0, Math.PI * 2); ctx.stroke(); }
+    }
+    const date = new Date();
+    const modeKey = $('mode').value === 'ir' ? 'modeNameIR' : 'modeNameReflect';
+    const info = marks.length ? { key: 'photoPoints', n: marks.length, m: modeKey } : { key: 'photoManual' };
+    const fs = Math.max(18, c.width / 45);
+    ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, c.height - fs * 1.8, c.width, fs * 1.8);
+    ctx.fillStyle = '#fff';
+    const rtl = document.documentElement.dir === 'rtl';
+    ctx.direction = rtl ? 'rtl' : 'ltr'; ctx.textAlign = 'start';
+    ctx.fillText(date.toLocaleString(I18N.lang) + '  •  ' + infoText(info), rtl ? c.width - fs * 0.5 : fs * 0.5, c.height - fs * 0.6, c.width - fs);
+
+    $('flash').style.opacity = 0.8; setTimeout(() => ($('flash').style.opacity = 0), 120);
+    c.toBlob(blob => {
+      if (!blob) { setStatus('saveFail', 'alert', null, 3000); return; }
+      savePhoto({ blob, date: date.toISOString(), info, auto: !!auto })
+        .then(updateCount)
+        .catch(() => setStatus('saveFail', 'alert', null, 3000));
+    }, 'image/jpeg', 0.9);
+  }
+  function infoText(info) {
+    if (!info) return '';
+    if (typeof info === 'string') return info; // anciennes photos
+    return info.key === 'photoPoints' ? t('photoPoints', { n: info.n, m: t(info.m) }) : t(info.key);
+  }
+
+  // ---------- Stockage local (IndexedDB) ----------
+  let dbp = null;
+  function db() {
+    if (!dbp) {
+      dbp = new Promise((res, rej) => {
+        if (!window.indexedDB) return rej(new Error('no indexedDB'));
+        const r = indexedDB.open('detecteur', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+      dbp.catch(() => { dbp = null; });
+    }
+    return dbp;
+  }
+  function run(mode, fn) {
+    return db().then(d => new Promise((res, rej) => {
+      const tx = d.transaction('photos', mode);
+      const r = fn(tx.objectStore('photos'));
+      tx.oncomplete = () => res(r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+    }));
+  }
+  const savePhoto = p => run('readwrite', s => s.add(p));
+  const allPhotos = () => run('readonly', s => s.getAll());
+  const delPhoto = id => run('readwrite', s => s.delete(id));
+  const clearPhotos = () => run('readwrite', s => s.clear());
+
+  function updateCount() { allPhotos().then(l => ($('photoCount').textContent = l.length)).catch(() => {}); }
+
+  let urls = [];
+  async function renderGallery() {
+    const g = $('gallery');
+    let list;
+    try { list = (await allPhotos()).reverse(); }
+    catch (e) { g.textContent = t('storageFail'); return; }
+    urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
+    g.innerHTML = '';
+    if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = t('noPhotos'); g.appendChild(p); return; }
+    for (const p of list) {
+      const u = URL.createObjectURL(p.blob); urls.push(u);
+      const name = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg';
+      const el = document.createElement('div'); el.className = 'shot';
+      const a = document.createElement('button'); a.className = 'thumb';
+      const im = document.createElement('img'); im.src = u; im.alt = ''; a.appendChild(im);
+      a.onclick = () => openViewer(u);
+      const meta = document.createElement('div'); meta.className = 'meta';
+      meta.textContent = new Date(p.date).toLocaleString(I18N.lang) + ' — ' + infoText(p.info) + (p.auto ? ' ' + t('auto') : '');
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const bSave = iconBtn('💾', t('save'));
+      bSave.onclick = () => { const d = document.createElement('a'); d.href = u; d.download = name; document.body.appendChild(d); d.click(); d.remove(); };
+      acts.appendChild(bSave);
+      const file = (typeof File === 'function') ? new File([p.blob], name, { type: 'image/jpeg' }) : null;
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const bShare = iconBtn('📤', t('share'));
+        bShare.onclick = () => navigator.share({ files: [file] }).catch(() => {});
+        acts.appendChild(bShare);
+      }
+      const bDel = iconBtn('🗑', t('delete'));
+      bDel.onclick = async () => { try { await delPhoto(p.id); } catch (e) {} renderGallery(); updateCount(); };
+      acts.appendChild(bDel);
+      el.append(a, meta, acts);
+      g.appendChild(el);
+    }
+  }
+  function iconBtn(icon, label) {
+    label = String(label).replace(/^[^\p{L}]+/u, ''); // retire l'emoji du libellé
+    const b = document.createElement('button'); b.textContent = icon; b.title = label; b.setAttribute('aria-label', label);
+    return b;
+  }
+  function openViewer(u) { $('viewerImg').src = u; $('photoViewer').hidden = false; }
+  function closeViewer() { $('photoViewer').hidden = true; $('viewerImg').removeAttribute('src'); }
+  $('photoViewer').onclick = closeViewer;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); hidePermHelp(); } });
+
+  $('clearBtn').onclick = async () => {
+    if (!confirm(t('confirmClear'))) return;
+    try { await clearPhotos(); } catch (e) {}
+    renderGallery(); updateCount();
+  };
+
+  // ---------- Son et vibration ----------
+  function initAudio() {
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) { audioCtx = null; }
+  }
+  function beep() {
+    if (!audioCtx) return;
+    try {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 1200; o.type = 'square'; g.gain.value = 0.08;
+      o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {}
+  }
+  function vibrate() { try { if (navigator.vibrate) navigator.vibrate([150, 80, 150]); } catch (e) {} }
+
+  // ---------- Magnétomètre (micros / électronique) ----------
+  let mag = { state: 'init', v: 0, d: 0, err: '' }, magBase = null, magStarted = false;
+  function renderMag() {
+    let s;
+    if (mag.state === 'init') s = t('magInit');
+    else if (mag.state === 'unsupported') s = t('magNotSupported');
+    else if (mag.state === 'error') s = t('magUnavailable', { e: mag.err });
+    else s = t('magField', { v: mag.v, d: mag.d }) + (mag.d > 25 ? t('magWarn') : '');
+    $('magInfo').textContent = s;
+  }
+  function startMagnetometer() {
+    if (magStarted) return;
+    if (!('Magnetometer' in window)) { mag.state = 'unsupported'; renderMag(); return; }
+    try {
+      const sensor = new Magnetometer({ frequency: 10 });
+      sensor.addEventListener('reading', () => {
+        const v = Math.hypot(sensor.x, sensor.y, sensor.z);
+        if (!isFinite(v)) return;
+        magBase = magBase == null ? v : magBase * 0.995 + v * 0.005; // champ terrestre moyen
+        const d = Math.abs(v - magBase);
+        mag = { state: 'ok', v: Math.round(v), d: Math.round(d), err: '' };
+        $('magBar').style.width = Math.min(100, d * 2) + '%';
+        renderMag();
+        if (d > 25 && running && $('sound').checked && Date.now() - lastAlert > 1500) { beep(); lastAlert = Date.now(); }
+      });
+      sensor.addEventListener('error', e => { mag = { state: 'error', err: (e.error && e.error.name) || '?' }; renderMag(); });
+      sensor.start(); magStarted = true;
+    } catch (e) { mag = { state: 'error', err: e.name || e.message }; renderMag(); }
+  }
+
+  $('startBtn').onclick = start;
+  $('torchBtn').onclick = toggleTorch;
+  $('switchBtn').onclick = switchCamera;
+  $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(x => x.hits >= MIN_HITS && x.miss === 0), work.width, false);
+
+  refreshTexts();
+  updateCount();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
