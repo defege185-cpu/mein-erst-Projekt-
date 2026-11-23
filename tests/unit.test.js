@@ -53,6 +53,31 @@ test('un reflet passager (1 image) n\'est jamais confirmé', () => {
   tr.update(b); for (let k = 0; k < 5; k++) assert.strictEqual(tr.update([]).length, 0);
 });
 
+function rect(im, x0, y0, x1, y1, c) {
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * im.width + x) * 4; im.data[i] = c[0]; im.data[i + 1] = c[1]; im.data[i + 2] = c[2]; }
+}
+test('ignore les coins et détails d\'un écran de télévision', () => {
+  const im = img(320, 240, [70, 70, 70], []);
+  rect(im, 100, 60, 220, 130, [230, 230, 235]);                  // écran lumineux
+  rect(im, 150, 90, 170, 125, [90, 90, 140]);                    // personnage sombre dans l'image
+  rect(im, 158, 100, 160, 102, WHITE);                           // reflet dans l'image
+  for (const [x, y] of [[100, 60], [219, 60], [100, 129], [219, 129]]) rect(im, x - 1, y - 1, x + 2, y + 2, WHITE); // coins
+  const r = D.analyze(im, { sensitivity: 8 });
+  assert.ok(r.blobs.every(b => b.x < 95 || b.x > 225 || b.y < 55 || b.y > 135) || r.blobs.length <= 1, JSON.stringify(r.blobs));
+  assert.ok(!r.blobs.some(b => Math.hypot(b.x - 100, b.y - 60) < 4 || Math.hypot(b.x - 219, b.y - 129) < 4), 'coin détecté');
+});
+test('ignore un reflet sur une tige métallique en diagonale', () => {
+  const im = img(320, 240, [120, 120, 120], []);
+  for (let k = 0; k < 10; k++) rect(im, 100 + k, 100 - k, 102 + k, 102 - k, WHITE);
+  assert.strictEqual(D.analyze(im, { sensitivity: 8 }).blobs.length, 0);
+});
+test('détecte toujours une lentille sur un objet sombre (réveil, détecteur…)', () => {
+  const im = img(320, 240, [150, 150, 150], []);
+  rect(im, 140, 100, 180, 130, [30, 30, 30]);                    // boîtier noir
+  rect(im, 159, 114, 161, 116, WHITE);                            // reflet de l'objectif
+  assert.strictEqual(D.analyze(im).blobs.length, 1);
+});
+
 test('toutes les langues ont toutes les traductions', () => {
   const T = require('../app/i18n.js').I18N._T;
   const ref = Object.keys(T.fr);
@@ -62,6 +87,7 @@ test('toutes les langues ont toutes les traductions', () => {
       assert.ok(dict[k] != null && dict[k] !== '', code + ' : clé manquante ' + k);
     }
     assert.strictEqual(dict.guide.length, T.fr.guide.length, code + ' : guide incomplet');
+    assert.ok(dict.delete, code + ' : delete');
     for (const k of ['permAndroid', 'permIOS', 'permDesktop']) assert.strictEqual(dict[k].length, T.fr[k].length, code + ' : ' + k + ' incomplet');
     for (const k of ['photoPoints', 'magField', 'cameraError', 'magUnavailable']) {
       const want = (T.fr[k].match(/\{\w+\}/g) || []).sort().join();

@@ -44,7 +44,7 @@ select, input[type=range], #lang { width:100%; font-size:1rem; padding:6px; back
 .shot { background:var(--card); border-radius:10px; overflow:hidden; }
 .shot img { width:100%; display:block; }
 .shot .meta { padding:6px 8px; font-size:.8rem; color:var(--muted); }
-.shot .acts { display:flex; } .shot .acts button { flex:1; border-radius:0; padding:8px; font-size:.85rem; }
+.shot .acts { display:flex; } .shot .acts button { flex:1; border-radius:0; padding:10px 4px; font-size:1.25rem; }
 ol li { margin-bottom:10px; line-height:1.4; }
 
 [dir=rtl] .status { direction:rtl; }
@@ -56,6 +56,11 @@ ol li { margin-bottom:10px; line-height:1.4; }
 .modal-box h2 { margin:0 0 8px; font-size:1.15rem; }
 .modal-box li { margin-bottom:8px; line-height:1.4; }
 .modal-box li:last-child { color:var(--muted); font-size:.9rem; }
+.thumb { display:block; width:100%; padding:0; border:0; border-radius:0; background:none; }
+.viewer { position:fixed; inset:0; z-index:30; background:#000; display:flex; align-items:center; justify-content:center; }
+.viewer[hidden] { display:none; }
+.viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+.viewer .close { position:absolute; top:calc(12px + env(safe-area-inset-top)); right:16px; font-size:1.6rem; color:#fff; background:rgba(0,0,0,.5); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
 </style>
 </head>
 <body>
@@ -136,6 +141,8 @@ ol li { margin-bottom:10px; line-height:1.4; }
     </div>
   </div>
 </div>
+
+<div id="photoViewer" class="viewer" hidden><img id="viewerImg" alt=""><span class="close">✕</span></div>
 
 <script>
 // Traductions de l'application. Pour ajouter une langue : copier le bloc "en" et traduire.
@@ -473,7 +480,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ["Dans Safari, touchez « aA » à gauche de l'adresse.", "Touchez « Réglages du site web », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages de l'iPhone → Safari → Caméra → Autoriser."],
       permDesktop: ["Cliquez sur l'icône à gauche de l'adresse (🔒 ou ⓘ).", "À côté de « Caméra », choisissez « Autoriser ».", "Fermez les autres applications qui utilisent la webcam (Zoom, Teams…)."],
       permFile: "La caméra est bloquée car l'application est ouverte comme un fichier. Sur téléphone, ouvrez-la depuis son adresse en ligne (https://…).",
-      retry: '🔄 Réessayer', close: 'Fermer'
+      retry: '🔄 Réessayer', close: 'Fermer', delete: 'Supprimer'
     },
     en: {
       permTitle: '📷 Allow the camera',
@@ -482,7 +489,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['In Safari, tap “aA” to the left of the address.', 'Tap “Website Settings”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: iPhone Settings → Safari → Camera → Allow.'],
       permDesktop: ['Click the icon to the left of the address (🔒 or ⓘ).', 'Next to “Camera”, choose “Allow”.', 'Close other apps using the webcam (Zoom, Teams…).'],
       permFile: 'The camera is blocked because the app was opened as a file. On a phone, open it from its online address (https://…).',
-      retry: '🔄 Try again', close: 'Close'
+      retry: '🔄 Try again', close: 'Close', delete: 'Delete'
     },
     de: {
       permTitle: '📷 Kamera erlauben',
@@ -491,7 +498,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['Tippen Sie in Safari links neben der Adresse auf „aA“.', 'Tippen Sie auf „Website-Einstellungen“ und dann auf „Kamera“.', 'Wählen Sie „Erlauben“.', 'Falls es immer noch nicht geht: iPhone-Einstellungen → Safari → Kamera → Erlauben.'],
       permDesktop: ['Klicken Sie auf das Symbol links neben der Adresse (🔒 oder ⓘ).', 'Wählen Sie neben „Kamera“ die Option „Zulassen“.', 'Schließen Sie andere Apps, die die Webcam nutzen (Zoom, Teams…).'],
       permFile: 'Die Kamera ist blockiert, weil die App als Datei geöffnet wurde. Öffnen Sie sie auf dem Handy über ihre Online-Adresse (https://…).',
-      retry: '🔄 Erneut versuchen', close: 'Schließen'
+      retry: '🔄 Erneut versuchen', close: 'Schließen', delete: 'Löschen'
     },
     es: {
       permTitle: '📷 Permitir la cámara',
@@ -500,7 +507,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['En Safari, toque «aA» a la izquierda de la dirección.', 'Toque «Ajustes del sitio web» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del iPhone → Safari → Cámara → Permitir.'],
       permDesktop: ['Haga clic en el icono a la izquierda de la dirección (🔒 o ⓘ).', 'Junto a «Cámara», elija «Permitir».', 'Cierre otras aplicaciones que usen la webcam (Zoom, Teams…).'],
       permFile: 'La cámara está bloqueada porque la aplicación se abrió como archivo. En el teléfono, ábrala desde su dirección en línea (https://…).',
-      retry: '🔄 Reintentar', close: 'Cerrar'
+      retry: '🔄 Reintentar', close: 'Cerrar', delete: 'Eliminar'
     },
     it: {
       permTitle: '📷 Consenti la fotocamera',
@@ -509,7 +516,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['In Safari, tocca «aA» a sinistra dell’indirizzo.', 'Tocca «Impostazioni sito web», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni iPhone → Safari → Fotocamera → Consenti.'],
       permDesktop: ['Fai clic sull’icona a sinistra dell’indirizzo (🔒 o ⓘ).', 'Accanto a «Fotocamera», scegli «Consenti».', 'Chiudi le altre app che usano la webcam (Zoom, Teams…).'],
       permFile: 'La fotocamera è bloccata perché l’app è stata aperta come file. Sul telefono, aprila dal suo indirizzo online (https://…).',
-      retry: '🔄 Riprova', close: 'Chiudi'
+      retry: '🔄 Riprova', close: 'Chiudi', delete: 'Elimina'
     },
     pt: {
       permTitle: '📷 Permitir a câmara',
@@ -518,7 +525,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['No Safari, toque em «aA» à esquerda do endereço.', 'Toque em «Definições do site» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do iPhone → Safari → Câmara → Permitir.'],
       permDesktop: ['Clique no ícone à esquerda do endereço (🔒 ou ⓘ).', 'Ao lado de «Câmara», escolha «Permitir».', 'Feche outras aplicações que usem a webcam (Zoom, Teams…).'],
       permFile: 'A câmara está bloqueada porque a aplicação foi aberta como ficheiro. No telemóvel, abra-a a partir do endereço online (https://…).',
-      retry: '🔄 Tentar novamente', close: 'Fechar'
+      retry: '🔄 Tentar novamente', close: 'Fechar', delete: 'Apagar'
     },
     tr: {
       permTitle: '📷 Kameraya izin verin',
@@ -527,7 +534,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['Safari’de adresin solundaki “aA”ya dokunun.', '“Web Sitesi Ayarları”na, ardından “Kamera”ya dokunun.', '“İzin Ver”i seçin.', 'Hâlâ çalışmıyorsa: iPhone Ayarları → Safari → Kamera → İzin Ver.'],
       permDesktop: ['Adresin solundaki simgeye (🔒 veya ⓘ) tıklayın.', '“Kamera”nın yanında “İzin ver”i seçin.', 'Web kamerasını kullanan diğer uygulamaları kapatın (Zoom, Teams…).'],
       permFile: 'Uygulama dosya olarak açıldığı için kamera engellendi. Telefonda uygulamayı çevrimiçi adresinden (https://…) açın.',
-      retry: '🔄 Tekrar dene', close: 'Kapat'
+      retry: '🔄 Tekrar dene', close: 'Kapat', delete: 'Sil'
     },
     ar: {
       permTitle: '📷 السماح بالكاميرا',
@@ -536,7 +543,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
       permIOS: ['في سفاري، اضغط على «aA» يسار العنوان.', 'اضغط على «إعدادات موقع الويب» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات iPhone ← Safari ← الكاميرا ← السماح.'],
       permDesktop: ['انقر على الرمز الموجود يسار العنوان (🔒 أو ⓘ).', 'بجانب «الكاميرا»، اختر «السماح».', 'أغلق التطبيقات الأخرى التي تستخدم كاميرا الويب (Zoom وTeams…).'],
       permFile: 'الكاميرا محظورة لأن التطبيق فُتح كملف. على الهاتف، افتحه من عنوانه على الإنترنت (https://…).',
-      retry: '🔄 إعادة المحاولة', close: 'إغلاق'
+      retry: '🔄 إعادة المحاولة', close: 'إغلاق', delete: 'حذف'
     }
   };
   for (const k in PERM) Object.assign(T[k], PERM[k]);
@@ -638,6 +645,56 @@ ol li { margin-bottom:10px; line-height:1.4; }
       }
     }
 
+    // Allongement (rapport des axes de l'ellipse équivalente), indépendant de l'angle.
+    function elongation(n, sx, sy, sxx, syy, sxy) {
+      const mx = sx / n, my = sy / n;
+      const a = sxx / n - mx * mx + 1 / 12, c = syy / n - my * my + 1 / 12, b = sxy / n - mx * my;
+      const d = Math.sqrt(((a - c) / 2) ** 2 + b * b), m = (a + c) / 2;
+      return Math.sqrt((m + d) / Math.max(1e-6, m - d));
+    }
+    const halo = new Int32Array(N); let haloMark = 0; const hstack = new Int32Array(N);
+    function isolated(pi, peak, size) {
+      const px = pi % W, py = (pi / W) | 0;
+      const win = Math.max(6, size * 2 + 4);          // demi-taille de la fenêtre d'analyse
+      // Fond : moyenne d'un anneau autour du point.
+      const rin = size + 2, rout = size + 5;
+      let bsum = 0, bn = 0;
+      const ring = [];
+      for (let dy = -rout; dy <= rout; dy++) for (let dx = -rout; dx <= rout; dx++) {
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        if (m < rin) continue;
+        const x = px + dx, y = py + dy;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const v = lum[y * W + x]; bsum += v; bn++; ring.push(v);
+      }
+      if (!bn) return false;
+      const bg = bsum / bn;
+      const thr = bg + 0.5 * (peak - bg);
+      // Trop de pixels clairs dans l'anneau = structure lumineuse à côté (bord d'écran…).
+      let bright = 0; for (const v of ring) if (v >= thr) bright++;
+      if (bright / bn > 0.1) return false;
+      // Forme de la tache à mi-hauteur : doit rester petite, ronde et à l'intérieur de la fenêtre.
+      haloMark++;
+      let sp = 0, area = 0, minX = px, maxX = px, minY = py, maxY = py, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+      hstack[sp++] = pi; halo[pi] = haloMark;
+      while (sp) {
+        const i = hstack[--sp];
+        const x = i % W, y = (i / W) | 0;
+        if (Math.abs(x - px) >= win || Math.abs(y - py) >= win) return false; // déborde : grande forme
+        area++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x > 0 && halo[i - 1] !== haloMark && lum[i - 1] >= thr) { halo[i - 1] = haloMark; hstack[sp++] = i - 1; }
+        if (x < W - 1 && halo[i + 1] !== haloMark && lum[i + 1] >= thr) { halo[i + 1] = haloMark; hstack[sp++] = i + 1; }
+        if (y > 0 && halo[i - W] !== haloMark && lum[i - W] >= thr) { halo[i - W] = haloMark; hstack[sp++] = i - W; }
+        if (y < H - 1 && halo[i + W] !== haloMark && lum[i + W] >= thr) { halo[i + W] = haloMark; hstack[sp++] = i + W; }
+      }
+      const hw = maxX - minX + 1, hh = maxY - minY + 1;
+      if (Math.max(hw, hh) / Math.min(hw, hh) > 2.5) return false;          // allongé (tige, trait)
+      if (area >= 4 && elongation(area, sx, sy, sxx, syy, sxy) > 2) return false; // allongé en diagonale
+      if (area > Math.max(12, (size + 2) * (size + 2) * 2)) return false;     // trop grand
+      return true;
+    }
+
     // Composantes connexes (taches lumineuses).
     const maxArea = Math.max(12, Math.round((W * H) / 600));
     const maxSide = Math.max(5, Math.round(W / 18));
@@ -645,13 +702,14 @@ ol li { margin-bottom:10px; line-height:1.4; }
     const stack = new Int32Array(N);
     for (let start = 0; start < N; start++) {
       if (mask[start] !== 1) continue;
-      let sp = 0, area = 0, sx = 0, sy = 0, sumL = 0;
+      let sp = 0, area = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sumL = 0, peak = 0, peakIdx = start;
       let minX = W, minY = H, maxX = 0, maxY = 0;
       stack[sp++] = start; mask[start] = 2;
       while (sp) {
         const i = stack[--sp];
         const x = i % W, y = (i / W) | 0;
-        area++; sx += x; sy += y; sumL += lum[i];
+        area++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sumL += lum[i];
+        if (lum[i] > peak) { peak = lum[i]; peakIdx = i; }
         if (x < minX) minX = x; if (x > maxX) maxX = x;
         if (y < minY) minY = y; if (y > maxY) maxY = y;
         const nb = [i - 1, i + 1, i - W, i + W];
@@ -669,6 +727,11 @@ ol li { margin-bottom:10px; line-height:1.4; }
       if (aspect > 2.2) continue;                        // une lentille est ronde
       const fill = area / (bw * bh);
       if (area > 3 && fill < 0.35) continue;
+      // Test d'isolement : une lentille est un petit point SEUL dans une zone plus sombre.
+      // Un coin d'écran, un détail d'image ou un reflet sur une tige métallique fait partie
+      // d'une forme claire plus grande ou allongée -> rejeté.
+      if (area >= 4 && elongation(area, sx, sy, sxx, syy, sxy) > 2) continue; // allongé, quel que soit l'angle
+      if (!isolated(peakIdx, peak, Math.max(bw, bh))) continue;
       const cx = sx / area, cy = sy / area;
       const contrast = sumL / area - localMean(Math.round(cx), Math.round(cy));
       const roundness = 1 / aspect;
@@ -911,12 +974,15 @@ ol li { margin-bottom:10px; line-height:1.4; }
 
     drawOverlay(res.blobs, confirmed, pw, ph);
 
-    if (confirmed.length) {
+    if (confirmed.length >= 4) {
+      // Beaucoup de points à la fois : écran, lustre ou surface brillante, pas des caméras.
+      setStatus('noisy', 'idle');
+    } else if (confirmed.length) {
       setStatus(mode === 'ir' ? 'alertIR' : 'alertLens', 'alert', { count: confirmed.length });
       const now = Date.now();
       if ($('sound').checked && now - lastAlert > 1500) { beep(); vibrate(); lastAlert = now; }
       const fresh = confirmed.filter(x => !x.shot);
-      if ($('autoShot').checked && fresh.length && now - lastShot > 2500) {
+      if ($('autoShot').checked && fresh.length && now - lastShot > 4000) {
         fresh.forEach(x => (x.shot = true));
         takePhoto(confirmed, pw, true);
         lastShot = now;
@@ -1040,27 +1106,38 @@ ol li { margin-bottom:10px; line-height:1.4; }
       const u = URL.createObjectURL(p.blob); urls.push(u);
       const name = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg';
       const el = document.createElement('div'); el.className = 'shot';
-      const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener';
+      const a = document.createElement('button'); a.className = 'thumb';
       const im = document.createElement('img'); im.src = u; im.alt = ''; a.appendChild(im);
+      a.onclick = () => openViewer(u);
       const meta = document.createElement('div'); meta.className = 'meta';
       meta.textContent = new Date(p.date).toLocaleString(I18N.lang) + ' — ' + infoText(p.info) + (p.auto ? ' ' + t('auto') : '');
       const acts = document.createElement('div'); acts.className = 'acts';
-      const bSave = document.createElement('button'); bSave.textContent = t('save');
+      const bSave = iconBtn('💾', t('save'));
       bSave.onclick = () => { const d = document.createElement('a'); d.href = u; d.download = name; document.body.appendChild(d); d.click(); d.remove(); };
       acts.appendChild(bSave);
       const file = (typeof File === 'function') ? new File([p.blob], name, { type: 'image/jpeg' }) : null;
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const bShare = document.createElement('button'); bShare.textContent = t('share');
+        const bShare = iconBtn('📤', t('share'));
         bShare.onclick = () => navigator.share({ files: [file] }).catch(() => {});
         acts.appendChild(bShare);
       }
-      const bDel = document.createElement('button'); bDel.textContent = '🗑'; bDel.setAttribute('aria-label', 'delete');
+      const bDel = iconBtn('🗑', t('delete'));
       bDel.onclick = async () => { try { await delPhoto(p.id); } catch (e) {} renderGallery(); updateCount(); };
       acts.appendChild(bDel);
       el.append(a, meta, acts);
       g.appendChild(el);
     }
   }
+  function iconBtn(icon, label) {
+    label = String(label).replace(/^[^\p{L}]+/u, ''); // retire l'emoji du libellé
+    const b = document.createElement('button'); b.textContent = icon; b.title = label; b.setAttribute('aria-label', label);
+    return b;
+  }
+  function openViewer(u) { $('viewerImg').src = u; $('photoViewer').hidden = false; }
+  function closeViewer() { $('photoViewer').hidden = true; $('viewerImg').removeAttribute('src'); }
+  $('photoViewer').onclick = closeViewer;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); hidePermHelp(); } });
+
   $('clearBtn').onclick = async () => {
     if (!confirm(t('confirmClear'))) return;
     try { await clearPhotos(); } catch (e) {}

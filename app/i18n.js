@@ -333,7 +333,7 @@
       permIOS: ["Dans Safari, touchez « aA » à gauche de l'adresse.", "Touchez « Réglages du site web », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages de l'iPhone → Safari → Caméra → Autoriser."],
       permDesktop: ["Cliquez sur l'icône à gauche de l'adresse (🔒 ou ⓘ).", "À côté de « Caméra », choisissez « Autoriser ».", "Fermez les autres applications qui utilisent la webcam (Zoom, Teams…)."],
       permFile: "La caméra est bloquée car l'application est ouverte comme un fichier. Sur téléphone, ouvrez-la depuis son adresse en ligne (https://…).",
-      retry: '🔄 Réessayer', close: 'Fermer'
+      retry: '🔄 Réessayer', close: 'Fermer', delete: 'Supprimer'
     },
     en: {
       permTitle: '📷 Allow the camera',
@@ -342,7 +342,7 @@
       permIOS: ['In Safari, tap “aA” to the left of the address.', 'Tap “Website Settings”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: iPhone Settings → Safari → Camera → Allow.'],
       permDesktop: ['Click the icon to the left of the address (🔒 or ⓘ).', 'Next to “Camera”, choose “Allow”.', 'Close other apps using the webcam (Zoom, Teams…).'],
       permFile: 'The camera is blocked because the app was opened as a file. On a phone, open it from its online address (https://…).',
-      retry: '🔄 Try again', close: 'Close'
+      retry: '🔄 Try again', close: 'Close', delete: 'Delete'
     },
     de: {
       permTitle: '📷 Kamera erlauben',
@@ -351,7 +351,7 @@
       permIOS: ['Tippen Sie in Safari links neben der Adresse auf „aA“.', 'Tippen Sie auf „Website-Einstellungen“ und dann auf „Kamera“.', 'Wählen Sie „Erlauben“.', 'Falls es immer noch nicht geht: iPhone-Einstellungen → Safari → Kamera → Erlauben.'],
       permDesktop: ['Klicken Sie auf das Symbol links neben der Adresse (🔒 oder ⓘ).', 'Wählen Sie neben „Kamera“ die Option „Zulassen“.', 'Schließen Sie andere Apps, die die Webcam nutzen (Zoom, Teams…).'],
       permFile: 'Die Kamera ist blockiert, weil die App als Datei geöffnet wurde. Öffnen Sie sie auf dem Handy über ihre Online-Adresse (https://…).',
-      retry: '🔄 Erneut versuchen', close: 'Schließen'
+      retry: '🔄 Erneut versuchen', close: 'Schließen', delete: 'Löschen'
     },
     es: {
       permTitle: '📷 Permitir la cámara',
@@ -360,7 +360,7 @@
       permIOS: ['En Safari, toque «aA» a la izquierda de la dirección.', 'Toque «Ajustes del sitio web» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del iPhone → Safari → Cámara → Permitir.'],
       permDesktop: ['Haga clic en el icono a la izquierda de la dirección (🔒 o ⓘ).', 'Junto a «Cámara», elija «Permitir».', 'Cierre otras aplicaciones que usen la webcam (Zoom, Teams…).'],
       permFile: 'La cámara está bloqueada porque la aplicación se abrió como archivo. En el teléfono, ábrala desde su dirección en línea (https://…).',
-      retry: '🔄 Reintentar', close: 'Cerrar'
+      retry: '🔄 Reintentar', close: 'Cerrar', delete: 'Eliminar'
     },
     it: {
       permTitle: '📷 Consenti la fotocamera',
@@ -369,7 +369,7 @@
       permIOS: ['In Safari, tocca «aA» a sinistra dell’indirizzo.', 'Tocca «Impostazioni sito web», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni iPhone → Safari → Fotocamera → Consenti.'],
       permDesktop: ['Fai clic sull’icona a sinistra dell’indirizzo (🔒 o ⓘ).', 'Accanto a «Fotocamera», scegli «Consenti».', 'Chiudi le altre app che usano la webcam (Zoom, Teams…).'],
       permFile: 'La fotocamera è bloccata perché l’app è stata aperta come file. Sul telefono, aprila dal suo indirizzo online (https://…).',
-      retry: '🔄 Riprova', close: 'Chiudi'
+      retry: '🔄 Riprova', close: 'Chiudi', delete: 'Elimina'
     },
     pt: {
       permTitle: '📷 Permitir a câmara',
@@ -378,7 +378,7 @@
       permIOS: ['No Safari, toque em «aA» à esquerda do endereço.', 'Toque em «Definições do site» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do iPhone → Safari → Câmara → Permitir.'],
       permDesktop: ['Clique no ícone à esquerda do endereço (🔒 ou ⓘ).', 'Ao lado de «Câmara», escolha «Permitir».', 'Feche outras aplicações que usem a webcam (Zoom, Teams…).'],
       permFile: 'A câmara está bloqueada porque a aplicação foi aberta como ficheiro. No telemóvel, abra-a a partir do endereço online (https://…).',
-      retry: '🔄 Tentar novamente', close: 'Fechar'
+      retry: '🔄 Tentar novamente', close: 'Fechar', delete: 'Apagar'
     },
     tr: {
       permTitle: '📷 Kameraya izin verin',
@@ -387,7 +387,7 @@
       permIOS: ['Safari’de adresin solundaki “aA”ya dokunun.', '“Web Sitesi Ayarları”na, ardından “Kamera”ya dokunun.', '“İzin Ver”i seçin.', 'Hâlâ çalışmıyorsa: iPhone Ayarları → Safari → Kamera → İzin Ver.'],
       permDesktop: ['Adresin solundaki simgeye (🔒 veya ⓘ) tıklayın.', '“Kamera”nın yanında “İzin ver”i seçin.', 'Web kamerasını kullanan diğer uygulamaları kapatın (Zoom, Teams…).'],
       permFile: 'Uygulama dosya olarak açıldığı için kamera engellendi. Telefonda uygulamayı çevrimiçi adresinden (https://…) açın.',
-      retry: '🔄 Tekrar dene', close: 'Kapat'
+      retry: '🔄 Tekrar dene', close: 'Kapat', delete: 'Sil'
     },
     ar: {
       permTitle: '📷 السماح بالكاميرا',
@@ -396,7 +396,7 @@
       permIOS: ['في سفاري، اضغط على «aA» يسار العنوان.', 'اضغط على «إعدادات موقع الويب» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات iPhone ← Safari ← الكاميرا ← السماح.'],
       permDesktop: ['انقر على الرمز الموجود يسار العنوان (🔒 أو ⓘ).', 'بجانب «الكاميرا»، اختر «السماح».', 'أغلق التطبيقات الأخرى التي تستخدم كاميرا الويب (Zoom وTeams…).'],
       permFile: 'الكاميرا محظورة لأن التطبيق فُتح كملف. على الهاتف، افتحه من عنوانه على الإنترنت (https://…).',
-      retry: '🔄 إعادة المحاولة', close: 'إغلاق'
+      retry: '🔄 إعادة المحاولة', close: 'إغلاق', delete: 'حذف'
     }
   };
   for (const k in PERM) Object.assign(T[k], PERM[k]);

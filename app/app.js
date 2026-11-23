@@ -190,12 +190,15 @@
 
     drawOverlay(res.blobs, confirmed, pw, ph);
 
-    if (confirmed.length) {
+    if (confirmed.length >= 4) {
+      // Beaucoup de points à la fois : écran, lustre ou surface brillante, pas des caméras.
+      setStatus('noisy', 'idle');
+    } else if (confirmed.length) {
       setStatus(mode === 'ir' ? 'alertIR' : 'alertLens', 'alert', { count: confirmed.length });
       const now = Date.now();
       if ($('sound').checked && now - lastAlert > 1500) { beep(); vibrate(); lastAlert = now; }
       const fresh = confirmed.filter(x => !x.shot);
-      if ($('autoShot').checked && fresh.length && now - lastShot > 2500) {
+      if ($('autoShot').checked && fresh.length && now - lastShot > 4000) {
         fresh.forEach(x => (x.shot = true));
         takePhoto(confirmed, pw, true);
         lastShot = now;
@@ -319,27 +322,38 @@
       const u = URL.createObjectURL(p.blob); urls.push(u);
       const name = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg';
       const el = document.createElement('div'); el.className = 'shot';
-      const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener';
+      const a = document.createElement('button'); a.className = 'thumb';
       const im = document.createElement('img'); im.src = u; im.alt = ''; a.appendChild(im);
+      a.onclick = () => openViewer(u);
       const meta = document.createElement('div'); meta.className = 'meta';
       meta.textContent = new Date(p.date).toLocaleString(I18N.lang) + ' — ' + infoText(p.info) + (p.auto ? ' ' + t('auto') : '');
       const acts = document.createElement('div'); acts.className = 'acts';
-      const bSave = document.createElement('button'); bSave.textContent = t('save');
+      const bSave = iconBtn('💾', t('save'));
       bSave.onclick = () => { const d = document.createElement('a'); d.href = u; d.download = name; document.body.appendChild(d); d.click(); d.remove(); };
       acts.appendChild(bSave);
       const file = (typeof File === 'function') ? new File([p.blob], name, { type: 'image/jpeg' }) : null;
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        const bShare = document.createElement('button'); bShare.textContent = t('share');
+        const bShare = iconBtn('📤', t('share'));
         bShare.onclick = () => navigator.share({ files: [file] }).catch(() => {});
         acts.appendChild(bShare);
       }
-      const bDel = document.createElement('button'); bDel.textContent = '🗑'; bDel.setAttribute('aria-label', 'delete');
+      const bDel = iconBtn('🗑', t('delete'));
       bDel.onclick = async () => { try { await delPhoto(p.id); } catch (e) {} renderGallery(); updateCount(); };
       acts.appendChild(bDel);
       el.append(a, meta, acts);
       g.appendChild(el);
     }
   }
+  function iconBtn(icon, label) {
+    label = String(label).replace(/^[^\p{L}]+/u, ''); // retire l'emoji du libellé
+    const b = document.createElement('button'); b.textContent = icon; b.title = label; b.setAttribute('aria-label', label);
+    return b;
+  }
+  function openViewer(u) { $('viewerImg').src = u; $('photoViewer').hidden = false; }
+  function closeViewer() { $('photoViewer').hidden = true; $('viewerImg').removeAttribute('src'); }
+  $('photoViewer').onclick = closeViewer;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); hidePermHelp(); } });
+
   $('clearBtn').onclick = async () => {
     if (!confirm(t('confirmClear'))) return;
     try { await clearPhotos(); } catch (e) {}
