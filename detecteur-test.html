@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Détecteur Caméra &amp; Micro</title>
+<style>
+:root { --bg:#0b1220; --card:#141d31; --text:#e8edf7; --muted:#9aa7c0; --accent:#3b82f6; --danger:#ef4444; --ok:#22c55e; }
+* { box-sizing:border-box; }
+html,body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+header { position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 16px 0; border-bottom:1px solid #22304d; }
+h1 { font-size:1.15rem; margin:0 0 8px; }
+nav { display:flex; gap:4px; }
+.tab { flex:1; background:none; border:none; color:var(--muted); padding:10px 4px; font-size:.95rem; border-bottom:3px solid transparent; }
+.tab.active { color:var(--text); border-color:var(--accent); }
+#photoCount { background:var(--danger); color:#fff; border-radius:10px; padding:0 7px; font-size:.75rem; }
+main { padding:12px 16px 40px; max-width:720px; margin:0 auto; }
+.panel { display:none; } .panel.active { display:block; }
+#viewer { position:relative; width:100%; aspect-ratio:3/4; max-height:65vh; background:#000; border-radius:14px; overflow:hidden; }
+#video, #overlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.status { position:absolute; left:8px; right:8px; bottom:8px; padding:8px 10px; border-radius:10px; font-weight:600; text-align:center; background:rgba(0,0,0,.6); }
+.status.ok { background:rgba(34,197,94,.85); } .status.alert { background:rgba(239,68,68,.92); animation:pulse .6s infinite alternate; }
+@keyframes pulse { to { transform:scale(1.03); } }
+#flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .3s; }
+.controls { display:flex; gap:8px; margin:12px 0; }
+button { background:var(--card); color:var(--text); border:1px solid #2a3a5c; border-radius:10px; padding:12px; font-size:1rem; }
+button:disabled { opacity:.4; } button.on { background:#facc15; color:#000; }
+.controls button { flex:1; } .primary { background:var(--accent); border-color:var(--accent); flex:2 !important; }
+.settings { display:grid; gap:10px; background:var(--card); padding:12px; border-radius:12px; }
+.settings label { display:grid; gap:4px; font-size:.95rem; }
+.settings label.check { display:flex; gap:8px; align-items:center; }
+select, input[type=range] { width:100%; font-size:1rem; padding:6px; background:#0f1728; color:var(--text); border:1px solid #2a3a5c; border-radius:8px; }
+.card { background:var(--card); padding:12px; border-radius:12px; margin-top:12px; }
+.card h3 { margin:0 0 6px; font-size:1rem; }
+.card.warn { border-left:4px solid #f59e0b; }
+.meter { height:14px; background:#0f1728; border-radius:7px; overflow:hidden; }
+#magBar { height:100%; width:0; background:linear-gradient(90deg,var(--ok),#facc15,var(--danger)); transition:width .2s; }
+.small { color:var(--muted); font-size:.85rem; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+#gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+.shot { background:var(--card); border-radius:10px; overflow:hidden; }
+.shot img { width:100%; display:block; }
+.shot .meta { padding:6px 8px; font-size:.8rem; color:var(--muted); }
+.shot .acts { display:flex; } .shot .acts button { flex:1; border-radius:0; padding:8px; font-size:.85rem; }
+ol li { margin-bottom:10px; line-height:1.4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔍 Détecteur Caméra &amp; Micro</h1>
+  <nav>
+    <button class="tab active" data-tab="scan">Scanner</button>
+    <button class="tab" data-tab="photos">Photos <span id="photoCount">0</span></button>
+    <button class="tab" data-tab="guide">Guide</button>
+  </nav>
+</header>
+
+<main>
+  <section id="scan" class="panel active">
+    <div id="viewer">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status idle">Appuyez sur « Démarrer le scan »</div>
+      <div id="flash"></div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="primary">▶ Démarrer le scan</button>
+      <button id="torchBtn" disabled>🔦 Lampe</button>
+      <button id="snapBtn" disabled>📷 Photo</button>
+    </div>
+
+    <div class="settings">
+      <label>Mode
+        <select id="mode">
+          <option value="reflet">Reflet d'objectif (lampe allumée)</option>
+          <option value="ir">Infrarouge (pièce dans le noir)</option>
+        </select>
+      </label>
+      <label>Sensibilité <b id="sensVal">5</b>
+        <input id="sens" type="range" min="1" max="10" value="5">
+      </label>
+      <label class="check"><input id="autoShot" type="checkbox" checked> Photo automatique dès qu'une caméra est suspectée</label>
+      <label class="check"><input id="sound" type="checkbox" checked> Bip + vibration</label>
+    </div>
+
+    <div class="card" id="magCard">
+      <h3>🧲 Détecteur magnétique (micros, électronique)</h3>
+      <p id="magInfo">Le magnétomètre sera activé au démarrage du scan si votre téléphone le permet.</p>
+      <div class="meter"><div id="magBar"></div></div>
+      <p class="small">Approchez le téléphone (à 2–5 cm) des objets : une forte hausse peut signaler un micro, une batterie ou un circuit électronique caché.</p>
+    </div>
+  </section>
+
+  <section id="photos" class="panel">
+    <div class="row">
+      <h2>Photos des détections</h2>
+      <button id="clearBtn">🗑 Tout effacer</button>
+    </div>
+    <p class="small">Les photos restent sur votre téléphone (rien n'est envoyé sur Internet). Touchez « Enregistrer » pour les garder dans vos fichiers.</p>
+    <div id="gallery"></div>
+  </section>
+
+  <section id="guide" class="panel">
+    <h2>Comment scanner une pièce</h2>
+    <ol>
+      <li><b>Mode « Reflet d'objectif »</b> : baissez la lumière, allumez la lampe 🔦. Les lentilles de caméra renvoient la lumière comme un petit point brillant. Balayez <b>lentement</b> murs, plafond, étagères, jouets, miroirs, détecteurs de fumée, prises, chargeurs, réveils, cadres…</li>
+      <li>Tenez le téléphone à la <b>hauteur de vos yeux</b> : le reflet est plus fort quand la lampe et la caméra sont alignées avec l'objectif.</li>
+      <li><b>Mode « Infrarouge »</b> : éteignez toutes les lumières. Les caméras de vision nocturne ont des LED infrarouges invisibles à l'œil, mais visibles par le téléphone (points violets/blancs). Astuce : la caméra <b>avant</b> de certains téléphones voit mieux l'infrarouge.</li>
+      <li>Quand un point brillant reste visible plusieurs images de suite, un cercle rouge apparaît et une <b>photo est prise automatiquement</b>.</li>
+      <li><b>Micros</b> : un micro ne se voit pas à la caméra. Utilisez le détecteur magnétique en approchant le téléphone des objets suspects, et vérifiez à la main les petits trous suspects.</li>
+      <li><b>Miroir sans tain</b> : posez le bout du doigt sur le miroir. S'il n'y a <b>aucun espace</b> entre le doigt et son reflet, éclairez-le avec la lampe collée au verre pour voir s'il y a quelque chose derrière.</li>
+    </ol>
+    <div class="card warn">
+      <b>⚠️ Limites :</b> aucune application ne peut garantir de trouver 100 % des caméras ou micros. Il y aura parfois de fausses alertes (vis brillantes, bijoux, gouttes d'eau, LED d'appareils). Vérifiez toujours chaque alerte à l'œil. En cas de doute sérieux, contactez la police ou un professionnel.
+    </div>
+  </section>
+</main>
+
+<script>
+// Détecteur d'objectifs de caméra (reflets) et de LED infrarouges.
+// Fonction pure : fonctionne sur un objet {data, width, height} (ImageData).
+(function (root) {
+  'use strict';
+
+  function analyze(img, opts) {
+    const o = Object.assign({ mode: 'reflet', sensitivity: 5 }, opts || {});
+    const { data, width: W, height: H } = img;
+    const N = W * H;
+    const lum = new Float32Array(N);
+    for (let i = 0, p = 0; i < N; i++, p += 4) {
+      lum[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    }
+
+    // Image intégrale pour calculer la luminosité moyenne autour de chaque pixel.
+    const integ = new Float64Array((W + 1) * (H + 1));
+    let sceneSum = 0;
+    for (let y = 0; y < H; y++) {
+      let row = 0;
+      for (let x = 0; x < W; x++) {
+        row += lum[y * W + x];
+        integ[(y + 1) * (W + 1) + x + 1] = integ[y * (W + 1) + x + 1] + row;
+      }
+      sceneSum += row;
+    }
+    const sceneMean = sceneSum / N;
+    const R = Math.max(4, Math.round(W / 40));
+    function localMean(x, y) {
+      const x0 = Math.max(0, x - R), y0 = Math.max(0, y - R);
+      const x1 = Math.min(W, x + R + 1), y1 = Math.min(H, y + R + 1);
+      const s = integ[y1 * (W + 1) + x1] - integ[y0 * (W + 1) + x1]
+              - integ[y1 * (W + 1) + x0] + integ[y0 * (W + 1) + x0];
+      return s / ((x1 - x0) * (y1 - y0));
+    }
+
+    // Sensibilité 1 (stricte) .. 10 (très sensible)
+    const s = Math.min(10, Math.max(1, o.sensitivity));
+    const minBright = o.mode === 'ir' ? 190 - s * 8 : 250 - s * 4;   // 182..110 / 246..210
+    const minContrast = o.mode === 'ir' ? 70 - s * 4 : 100 - s * 6;  // 66..30 / 94..40
+
+    const mask = new Uint8Array(N);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const L = lum[i];
+        if (L < minBright) continue;
+        if (L - localMean(x, y) < minContrast) continue;
+        if (o.mode === 'ir') {
+          const p = i * 4, r = data[p], g = data[p + 1], b = data[p + 2];
+          // Les LED infrarouges apparaissent violettes/roses ou blanches dans une pièce sombre.
+          const purple = b > g + 12 && r > g + 5;
+          const whiteInDark = sceneMean < 70 && L > 200;
+          if (!purple && !whiteInDark) continue;
+        }
+        mask[i] = 1;
+      }
+    }
+
+    // Composantes connexes (taches lumineuses).
+    const maxArea = Math.max(12, Math.round((W * H) / 600));
+    const maxSide = Math.max(5, Math.round(W / 18));
+    const blobs = [];
+    const stack = new Int32Array(N);
+    for (let start = 0; start < N; start++) {
+      if (mask[start] !== 1) continue;
+      let sp = 0, area = 0, sx = 0, sy = 0, sumL = 0;
+      let minX = W, minY = H, maxX = 0, maxY = 0;
+      stack[sp++] = start; mask[start] = 2;
+      while (sp) {
+        const i = stack[--sp];
+        const x = i % W, y = (i / W) | 0;
+        area++; sx += x; sy += y; sumL += lum[i];
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (area > maxArea * 4) continue; // trop grand : on arrête d'explorer
+        const nb = [i - 1, i + 1, i - W, i + W];
+        for (let k = 0; k < 4; k++) {
+          const j = nb[k];
+          if (j < 0 || j >= N) continue;
+          if ((k === 0 && x === 0) || (k === 1 && x === W - 1)) continue;
+          if (mask[j] === 1) { mask[j] = 2; stack[sp++] = j; }
+        }
+      }
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      if (area < 1 || area > maxArea) continue;          // trop gros = lampe, fenêtre…
+      if (bw > maxSide || bh > maxSide) continue;
+      const aspect = Math.max(bw, bh) / Math.min(bw, bh);
+      if (aspect > 2.2) continue;                        // une lentille est ronde
+      const fill = area / (bw * bh);
+      if (area > 3 && fill < 0.35) continue;
+      const cx = sx / area, cy = sy / area;
+      const contrast = sumL / area - localMean(Math.round(cx), Math.round(cy));
+      const roundness = 1 / aspect;
+      const score = Math.min(1, (contrast / 160) * 0.6 + roundness * 0.25 + fill * 0.15);
+      blobs.push({ x: cx, y: cy, r: Math.max(bw, bh) / 2 + 1, area, contrast, score });
+    }
+
+    blobs.sort((a, b) => b.score - a.score);
+    // Beaucoup de taches = surface brillante/pailletée : on ne garde que les meilleures.
+    const noisy = blobs.length > 25;
+    return { blobs: blobs.slice(0, noisy ? 3 : 10), noisy, sceneMean };
+  }
+
+  // Suivi dans le temps : une vraie lentille reste visible plusieurs images de suite.
+  function Tracker(opts) {
+    this.minHits = (opts && opts.minHits) || 4;
+    this.maxDist = (opts && opts.maxDist) || 14;
+    this.tracks = [];
+    this.nextId = 1;
+  }
+  Tracker.prototype.update = function (blobs) {
+    const used = new Set();
+    for (const t of this.tracks) {
+      let best = -1, bestD = this.maxDist;
+      blobs.forEach((b, i) => {
+        if (used.has(i)) return;
+        const d = Math.hypot(b.x - t.x, b.y - t.y);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      if (best >= 0) {
+        const b = blobs[best]; used.add(best);
+        t.x = t.x * 0.5 + b.x * 0.5; t.y = t.y * 0.5 + b.y * 0.5;
+        t.r = b.r; t.score = b.score; t.hits++; t.miss = 0;
+      } else {
+        t.miss++;
+      }
+    }
+    this.tracks = this.tracks.filter(t => t.miss < 3);
+    blobs.forEach((b, i) => {
+      if (!used.has(i)) this.tracks.push({ id: this.nextId++, x: b.x, y: b.y, r: b.r, score: b.score, hits: 1, miss: 0, shot: false });
+    });
+    return this.tracks.filter(t => t.hits >= this.minHits && t.miss === 0);
+  };
+
+  const api = { analyze, Tracker };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Detector = api;
+})(this);
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
+  const statusEl = $('status');
+  const work = document.createElement('canvas');
+  const wctx = work.getContext('2d', { willReadFrequently: true });
+  const PROC_W = 320;
+
+  let stream = null, track = null, running = false, torchOn = false;
+  let tracker = new Detector.Tracker({ minHits: 4 });
+  let lastShot = 0, lastAlert = 0;
+  let audioCtx = null;
+
+  // ---------- Onglets ----------
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === b));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
+    if (b.dataset.tab === 'photos') renderGallery();
+  }));
+
+  $('sens').addEventListener('input', e => { $('sensVal').textContent = e.target.value; });
+  $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: 4 }); });
+
+  function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status ' + cls; }
+
+  // ---------- Caméra ----------
+  async function start() {
+    if (running) return stop();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('Caméra non disponible. Ouvrez la page en HTTPS dans Chrome ou Safari.', 'alert');
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+    } catch (err) {
+      setStatus('Accès caméra refusé : ' + err.message, 'alert');
+      return;
+    }
+    video.srcObject = stream;
+    await video.play();
+    track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    $('torchBtn').disabled = !caps.torch;
+    $('torchBtn').title = caps.torch ? '' : 'Lampe non pilotable sur cet appareil';
+    $('snapBtn').disabled = false;
+    $('startBtn').textContent = '⏹ Arrêter';
+    running = true;
+    initAudio();
+    startMagnetometer();
+    setStatus('Scan en cours… balayez lentement', 'ok');
+    requestAnimationFrame(loop);
+  }
+
+  function stop() {
+    running = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null; track = null; torchOn = false;
+    $('torchBtn').classList.remove('on'); $('torchBtn').disabled = true; $('snapBtn').disabled = true;
+    $('startBtn').textContent = '▶ Démarrer le scan';
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    setStatus('Scan arrêté', 'idle');
+  }
+
+  async function toggleTorch() {
+    if (!track) return;
+    try {
+      torchOn = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+      $('torchBtn').classList.toggle('on', torchOn);
+    } catch (e) { torchOn = false; setStatus('Impossible d\'allumer la lampe', 'alert'); }
+  }
+
+  // ---------- Boucle d'analyse ----------
+  let lastProc = 0;
+  function loop(ts) {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    if (ts - lastProc < 66 || !video.videoWidth) return; // ~15 analyses / seconde
+    lastProc = ts;
+
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const pw = PROC_W, ph = Math.round(PROC_W * vh / vw);
+    if (work.width !== pw) { work.width = pw; work.height = ph; }
+    wctx.drawImage(video, 0, 0, pw, ph);
+    const img = wctx.getImageData(0, 0, pw, ph);
+    const res = Detector.analyze(img, { mode: $('mode').value, sensitivity: +$('sens').value });
+    const confirmed = tracker.update(res.blobs);
+
+    drawOverlay(res.blobs, confirmed, pw, ph);
+
+    if (confirmed.length) {
+      const label = $('mode').value === 'ir' ? 'LED infrarouge suspecte !' : 'Objectif de caméra suspect !';
+      setStatus('⚠️ ' + label + ' (' + confirmed.length + ')', 'alert');
+      const now = Date.now();
+      if ($('sound').checked && now - lastAlert > 1500) { beep(); if (navigator.vibrate) navigator.vibrate([150, 80, 150]); lastAlert = now; }
+      const fresh = confirmed.filter(t => !t.shot);
+      if ($('autoShot').checked && fresh.length && now - lastShot > 2500) {
+        fresh.forEach(t => (t.shot = true));
+        takePhoto(confirmed, pw, ph, true);
+        lastShot = now;
+      }
+    } else if (res.noisy) {
+      setStatus('Trop de reflets ici (surface brillante) — changez d\'angle', 'idle');
+    } else {
+      setStatus('Scan en cours… rien de suspect', 'ok');
+    }
+  }
+
+  // Conversion coordonnées d'analyse -> écran (vidéo en object-fit: cover)
+  function mapper(pw, ph) {
+    const W = overlay.clientWidth, H = overlay.clientHeight;
+    const scale = Math.max(W / pw, H / ph);
+    const ox = (W - pw * scale) / 2, oy = (H - ph * scale) / 2;
+    return { W, H, f: (x, y) => [ox + x * scale, oy + y * scale], scale };
+  }
+
+  function drawOverlay(blobs, confirmed, pw, ph) {
+    const dpr = window.devicePixelRatio || 1;
+    const m = mapper(pw, ph);
+    if (overlay.width !== Math.round(m.W * dpr)) { overlay.width = Math.round(m.W * dpr); overlay.height = Math.round(m.H * dpr); }
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, m.W, m.H);
+    octx.lineWidth = 2;
+    octx.strokeStyle = 'rgba(250,204,21,.8)';
+    for (const b of blobs) {
+      const [x, y] = m.f(b.x, b.y);
+      octx.beginPath(); octx.arc(x, y, Math.max(8, b.r * m.scale + 6), 0, Math.PI * 2); octx.stroke();
+    }
+    octx.lineWidth = 4; octx.strokeStyle = '#ef4444'; octx.fillStyle = '#ef4444';
+    octx.font = 'bold 14px system-ui';
+    for (const t of confirmed) {
+      const [x, y] = m.f(t.x, t.y);
+      const r = Math.max(16, t.r * m.scale + 14);
+      octx.beginPath(); octx.arc(x, y, r, 0, Math.PI * 2); octx.stroke();
+      octx.fillText(Math.round(t.score * 100) + '%', x + r + 4, y + 5);
+    }
+  }
+
+  // ---------- Photo ----------
+  function takePhoto(marks, pw, ph, auto) {
+    if (!video.videoWidth) return;
+    const c = document.createElement('canvas');
+    c.width = video.videoWidth; c.height = video.videoHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const k = c.width / pw;
+    ctx.lineWidth = Math.max(4, c.width / 200); ctx.strokeStyle = '#ef4444';
+    for (const t of marks || []) {
+      ctx.beginPath(); ctx.arc(t.x * k, t.y * k, Math.max(30, t.r * k * 3), 0, Math.PI * 2); ctx.stroke();
+    }
+    const date = new Date();
+    const fs = Math.max(18, c.width / 45);
+    ctx.font = 'bold ' + fs + 'px system-ui';
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, c.height - fs * 1.8, c.width, fs * 1.8);
+    ctx.fillStyle = '#fff';
+    const what = marks && marks.length ? (marks.length + ' point(s) suspect(s) — ' + ($('mode').value === 'ir' ? 'infrarouge' : 'reflet d\'objectif')) : 'Photo manuelle';
+    ctx.fillText(date.toLocaleString('fr-FR') + '  •  ' + what, fs * 0.5, c.height - fs * 0.6);
+
+    $('flash').style.opacity = .8; setTimeout(() => ($('flash').style.opacity = 0), 120);
+    c.toBlob(blob => {
+      savePhoto({ blob, date: date.toISOString(), info: what, auto: !!auto, mag: lastMag })
+        .then(updateCount).catch(() => setStatus('Impossible d\'enregistrer la photo', 'alert'));
+    }, 'image/jpeg', 0.9);
+  }
+
+  // ---------- Stockage local (IndexedDB) ----------
+  let dbp = null;
+  function db() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('detecteur', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  function store(mode) { return db().then(d => d.transaction('photos', mode).objectStore('photos')); }
+  function req(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+  const savePhoto = p => store('readwrite').then(s => req(s.add(p)));
+  const allPhotos = () => store('readonly').then(s => req(s.getAll()));
+  const delPhoto = id => store('readwrite').then(s => req(s.delete(id)));
+  const clearPhotos = () => store('readwrite').then(s => req(s.clear()));
+
+  function updateCount() { allPhotos().then(l => ($('photoCount').textContent = l.length)).catch(() => {}); }
+
+  let urls = [];
+  async function renderGallery() {
+    urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
+    const g = $('gallery'); g.innerHTML = '';
+    const list = (await allPhotos()).reverse();
+    if (!list.length) { g.innerHTML = '<p class="small">Aucune photo pour le moment.</p>'; return; }
+    for (const p of list) {
+      const u = URL.createObjectURL(p.blob); urls.push(u);
+      const el = document.createElement('div'); el.className = 'shot';
+      el.innerHTML = '<a href="' + u + '" target="_blank"><img src="' + u + '" alt="détection"></a>' +
+        '<div class="meta"></div><div class="acts"><button data-a="save">💾 Enregistrer</button><button data-a="del">🗑</button></div>';
+      el.querySelector('.meta').textContent = new Date(p.date).toLocaleString('fr-FR') + ' — ' + p.info + (p.auto ? ' (auto)' : '');
+      el.querySelector('[data-a=save]').onclick = () => {
+        const a = document.createElement('a'); a.href = u;
+        a.download = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg'; a.click();
+      };
+      el.querySelector('[data-a=del]').onclick = async () => { await delPhoto(p.id); renderGallery(); updateCount(); };
+      g.appendChild(el);
+    }
+  }
+  $('clearBtn').onclick = async () => { if (confirm('Effacer toutes les photos ?')) { await clearPhotos(); renderGallery(); updateCount(); } };
+
+  // ---------- Son ----------
+  function initAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {} }
+  function beep() {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = 1200; o.type = 'square'; g.gain.value = 0.08;
+    o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15);
+  }
+
+  // ---------- Magnétomètre (micros / électronique) ----------
+  let lastMag = null, magBase = null, magStarted = false;
+  function startMagnetometer() {
+    if (magStarted) return;
+    if (!('Magnetometer' in window)) {
+      $('magInfo').textContent = 'Magnétomètre non accessible depuis le navigateur sur ce téléphone (sur Android/Chrome, il faut activer chrome://flags → « Generic Sensor Extra Classes »).';
+      return;
+    }
+    try {
+      const mag = new Magnetometer({ frequency: 10 });
+      mag.addEventListener('reading', () => {
+        const v = Math.hypot(mag.x, mag.y, mag.z);
+        magBase = magBase == null ? v : magBase * 0.995 + v * 0.005; // champ terrestre moyen
+        const delta = Math.abs(v - magBase);
+        lastMag = Math.round(v);
+        $('magBar').style.width = Math.min(100, delta * 2) + '%';
+        $('magInfo').textContent = 'Champ : ' + Math.round(v) + ' µT  •  écart : ' + Math.round(delta) + ' µT' + (delta > 25 ? '  ⚠️ électronique/métal proche !' : '');
+        if (delta > 25 && running && $('sound').checked && Date.now() - lastAlert > 1500) { beep(); lastAlert = Date.now(); }
+      });
+      mag.addEventListener('error', e => { $('magInfo').textContent = 'Magnétomètre indisponible : ' + e.error.name; });
+      mag.start(); magStarted = true;
+    } catch (e) { $('magInfo').textContent = 'Magnétomètre indisponible : ' + e.message; }
+  }
+
+  $('startBtn').onclick = start;
+  $('torchBtn').onclick = toggleTorch;
+  $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(t => t.hits >= tracker.minHits), work.width, work.height, false);
+
+  updateCount();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
