@@ -11,76 +11,72 @@
 </head>
 <body>
 <header>
-  <h1>🔍 Détecteur Caméra &amp; Micro</h1>
+  <div class="top">
+    <h1>🔍 <span data-i18n="title">Détecteur Caméra &amp; Micro</span></h1>
+    <select id="lang" aria-label="Langue / Language"></select>
+  </div>
   <nav>
-    <button class="tab active" data-tab="scan">Scanner</button>
-    <button class="tab" data-tab="photos">Photos <span id="photoCount">0</span></button>
-    <button class="tab" data-tab="guide">Guide</button>
+    <button class="tab active" data-tab="scan"><span data-i18n="tabScan">Scanner</span></button>
+    <button class="tab" data-tab="photos"><span data-i18n="tabPhotos">Photos</span> <span id="photoCount">0</span></button>
+    <button class="tab" data-tab="guide"><span data-i18n="tabGuide">Guide</span></button>
   </nav>
 </header>
 
 <main>
   <section id="scan" class="panel active">
     <div id="viewer">
-      <video id="video" playsinline muted></video>
+      <video id="video" playsinline muted autoplay></video>
       <canvas id="overlay"></canvas>
-      <div id="status" class="status idle">Appuyez sur « Démarrer le scan »</div>
+      <div id="status" class="status idle" role="status" aria-live="polite"></div>
       <div id="flash"></div>
     </div>
 
     <div class="controls">
-      <button id="startBtn" class="primary">▶ Démarrer le scan</button>
-      <button id="torchBtn" disabled>🔦 Lampe</button>
-      <button id="snapBtn" disabled>📷 Photo</button>
+      <button id="startBtn" class="primary"></button>
+      <button id="torchBtn" disabled data-i18n="torch"></button>
+      <button id="switchBtn" disabled data-i18n="switchCam"></button>
+      <button id="snapBtn" disabled data-i18n="photo"></button>
     </div>
 
     <div class="settings">
-      <label>Mode
+      <label><span data-i18n="mode"></span>
         <select id="mode">
-          <option value="reflet">Reflet d'objectif (lampe allumée)</option>
-          <option value="ir">Infrarouge (pièce dans le noir)</option>
+          <option value="reflet" data-i18n="modeReflect"></option>
+          <option value="ir" data-i18n="modeIR"></option>
         </select>
       </label>
-      <label>Sensibilité <b id="sensVal">5</b>
+      <label><span><span data-i18n="sensitivity"></span> <b id="sensVal">5</b></span>
         <input id="sens" type="range" min="1" max="10" value="5">
       </label>
-      <label class="check"><input id="autoShot" type="checkbox" checked> Photo automatique dès qu'une caméra est suspectée</label>
-      <label class="check"><input id="sound" type="checkbox" checked> Bip + vibration</label>
+      <label class="check"><input id="autoShot" type="checkbox" checked> <span data-i18n="autoShot"></span></label>
+      <label class="check"><input id="sound" type="checkbox" checked> <span data-i18n="sound"></span></label>
     </div>
 
     <div class="card" id="magCard">
-      <h3>🧲 Détecteur magnétique (micros, électronique)</h3>
-      <p id="magInfo">Le magnétomètre sera activé au démarrage du scan si votre téléphone le permet.</p>
+      <h3 data-i18n="magTitle"></h3>
+      <p id="magInfo"></p>
       <div class="meter"><div id="magBar"></div></div>
-      <p class="small">Approchez le téléphone (à 2–5 cm) des objets : une forte hausse peut signaler un micro, une batterie ou un circuit électronique caché.</p>
+      <p class="small" data-i18n="magHint"></p>
     </div>
   </section>
 
   <section id="photos" class="panel">
     <div class="row">
-      <h2>Photos des détections</h2>
-      <button id="clearBtn">🗑 Tout effacer</button>
+      <h2 data-i18n="photosTitle"></h2>
+      <button id="clearBtn" data-i18n="clearAll"></button>
     </div>
-    <p class="small">Les photos restent sur votre téléphone (rien n'est envoyé sur Internet). Touchez « Enregistrer » pour les garder dans vos fichiers.</p>
+    <p class="small" data-i18n="photosHint"></p>
     <div id="gallery"></div>
   </section>
 
   <section id="guide" class="panel">
-    <h2>Comment scanner une pièce</h2>
-    <ol>
-      <li><b>Mode « Reflet d'objectif »</b> : baissez la lumière, allumez la lampe 🔦. Les lentilles de caméra renvoient la lumière comme un petit point brillant. Balayez <b>lentement</b> murs, plafond, étagères, jouets, miroirs, détecteurs de fumée, prises, chargeurs, réveils, cadres…</li>
-      <li>Tenez le téléphone à la <b>hauteur de vos yeux</b> : le reflet est plus fort quand la lampe et la caméra sont alignées avec l'objectif.</li>
-      <li><b>Mode « Infrarouge »</b> : éteignez toutes les lumières. Les caméras de vision nocturne ont des LED infrarouges invisibles à l'œil, mais visibles par le téléphone (points violets/blancs). Astuce : la caméra <b>avant</b> de certains téléphones voit mieux l'infrarouge.</li>
-      <li>Quand un point brillant reste visible plusieurs images de suite, un cercle rouge apparaît et une <b>photo est prise automatiquement</b>.</li>
-      <li><b>Micros</b> : un micro ne se voit pas à la caméra. Utilisez le détecteur magnétique en approchant le téléphone des objets suspects, et vérifiez à la main les petits trous suspects.</li>
-      <li><b>Miroir sans tain</b> : posez le bout du doigt sur le miroir. S'il n'y a <b>aucun espace</b> entre le doigt et son reflet, éclairez-le avec la lampe collée au verre pour voir s'il y a quelque chose derrière.</li>
-    </ol>
-    <div class="card warn">
-      <b>⚠️ Limites :</b> aucune application ne peut garantir de trouver 100 % des caméras ou micros. Il y aura parfois de fausses alertes (vis brillantes, bijoux, gouttes d'eau, LED d'appareils). Vérifiez toujours chaque alerte à l'œil. En cas de doute sérieux, contactez la police ou un professionnel.
-    </div>
+    <h2 data-i18n="guideTitle"></h2>
+    <ol id="guideList"></ol>
+    <div class="card warn" id="guideWarn"></div>
   </section>
 </main>
 
+<script src="i18n.js"></script>
 <script src="detector.js"></script>
 <script src="app.js"></script>
 </body>

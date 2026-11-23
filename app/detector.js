@@ -72,7 +72,6 @@
         area++; sx += x; sy += y; sumL += lum[i];
         if (x < minX) minX = x; if (x > maxX) maxX = x;
         if (y < minY) minY = y; if (y > maxY) maxY = y;
-        if (area > maxArea * 4) continue; // trop grand : on arrête d'explorer
         const nb = [i - 1, i + 1, i - W, i + W];
         for (let k = 0; k < 4; k++) {
           const j = nb[k];

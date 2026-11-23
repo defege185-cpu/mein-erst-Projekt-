@@ -13,8 +13,20 @@ Les photos restent stockées sur le téléphone.
 - **Mode « Infrarouge »** : dans le noir, repère les LED infrarouges des caméras de vision nocturne.
 - **Photo automatique** dès qu'un point suspect reste visible plusieurs images de suite (cercle rouge + date).
 - Bip + vibration à chaque alerte.
+- Bouton 🔄 pour passer à la caméra avant (souvent meilleure pour l'infrarouge).
 - **Détecteur magnétique** (si le téléphone le permet) pour les micros et circuits électroniques.
 - Galerie des photos avec enregistrement et suppression.
+
+## Langues
+Français, English, Deutsch, Español, Italiano, Português, Türkçe, العربية.
+La langue du téléphone est choisie automatiquement ; elle peut être changée en haut à droite.
+Pour ajouter une langue : copier le bloc `en` dans `app/i18n.js` et le traduire.
+
+## Tester avant la mise en ligne
+Ouvrir `detecteur-test.html` dans Google Chrome sur un ordinateur avec webcam.
+Ce fichier contient toute l'application (il est régénéré avec `python3 tools/build-single.py`).
+
+Tests automatiques : `node --test tests/*.test.js`
 
 ## Utilisation
 La caméra ne fonctionne qu'en **HTTPS**. Le plus simple (gratuit) : activer **GitHub Pages**

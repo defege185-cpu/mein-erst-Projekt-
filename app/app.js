@@ -1,112 +1,170 @@
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  const t = (k, v) => I18N.t(k, v);
   const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
   const statusEl = $('status');
   const work = document.createElement('canvas');
   const wctx = work.getContext('2d', { willReadFrequently: true });
   const PROC_W = 320;
+  const MIN_HITS = 4;
 
-  let stream = null, track = null, running = false, torchOn = false;
-  let tracker = new Detector.Tracker({ minHits: 4 });
-  let lastShot = 0, lastAlert = 0;
-  let audioCtx = null;
+  let stream = null, track = null, running = false, starting = false, torchOn = false;
+  let facing = 'environment';
+  let tracker = new Detector.Tracker({ minHits: MIN_HITS });
+  let lastShot = 0, lastAlert = 0, audioCtx = null;
+
+  // ---------- Langue ----------
+  const langSel = $('lang');
+  I18N.languages.forEach(l => { const o = document.createElement('option'); o.value = l.code; o.textContent = l.name; langSel.appendChild(o); });
+  langSel.value = I18N.lang;
+  langSel.addEventListener('change', () => I18N.set(langSel.value));
+  document.addEventListener('langchange', refreshTexts);
+
+  function refreshTexts() {
+    I18N.apply();
+    $('startBtn').textContent = t(running ? 'stop' : 'start');
+    renderStatus();
+    renderMag();
+    $('torchBtn').title = track && $('torchBtn').disabled ? t('torchUnsupported') : '';
+    if ($('photos').classList.contains('active')) renderGallery();
+  }
+
+  // ---------- Statut (mémorisé pour pouvoir changer de langue) ----------
+  let status = { key: 'statusIdle', cls: 'idle', vars: null }, holdUntil = 0;
+  function setStatus(key, cls, vars, holdMs) {
+    if (!holdMs && Date.now() < holdUntil) return; // un message important reste affiché un moment
+    status = { key, cls, vars: vars || null };
+    holdUntil = holdMs ? Date.now() + holdMs : 0;
+    renderStatus();
+  }
+  function renderStatus() {
+    let txt = t(status.key, status.vars);
+    statusEl.textContent = (status.cls === 'alert' && status.vars && status.vars.count ? '⚠️ ' + txt + ' (' + status.vars.count + ')' : txt);
+    statusEl.className = 'status ' + status.cls;
+  }
 
   // ---------- Onglets ----------
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === b));
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
     document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
     if (b.dataset.tab === 'photos') renderGallery();
   }));
 
   $('sens').addEventListener('input', e => { $('sensVal').textContent = e.target.value; });
-  $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: 4 }); });
-
-  function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status ' + cls; }
+  $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: MIN_HITS }); });
 
   // ---------- Caméra ----------
-  async function start() {
-    if (running) return stop();
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStatus('Caméra non disponible. Ouvrez la page en HTTPS dans Chrome ou Safari.', 'alert');
-      return;
-    }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-      });
-    } catch (err) {
-      setStatus('Accès caméra refusé : ' + err.message, 'alert');
-      return;
-    }
-    video.srcObject = stream;
-    await video.play();
+  async function openCamera() {
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    if (stream) stream.getTracks().forEach(x => x.stop());
+    stream = s;
     track = stream.getVideoTracks()[0];
+    track.addEventListener('ended', () => { if (running) { stop(); setStatus('cameraLost', 'alert', null, 4000); } });
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) { /* autoplay : la vidéo démarrera quand même (muted + playsinline) */ }
+    torchOn = false;
+    $('torchBtn').classList.remove('on');
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     $('torchBtn').disabled = !caps.torch;
-    $('torchBtn').title = caps.torch ? '' : 'Lampe non pilotable sur cet appareil';
-    $('snapBtn').disabled = false;
-    $('startBtn').textContent = '⏹ Arrêter';
-    running = true;
+    $('torchBtn').title = caps.torch ? '' : t('torchUnsupported');
+    tracker = new Detector.Tracker({ minHits: MIN_HITS });
+  }
+
+  async function start() {
+    if (starting) return;
+    if (running) { stop(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus('noCamera', 'alert', null, 6000); return; }
+    starting = true;
     initAudio();
+    try {
+      await openCamera();
+    } catch (err) {
+      starting = false;
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      setStatus(denied ? 'cameraDenied' : 'cameraError', 'alert', { e: (err && (err.message || err.name)) || '?' }, 6000);
+      return;
+    }
+    starting = false;
+    running = true;
+    $('snapBtn').disabled = false;
+    $('switchBtn').disabled = false;
+    $('startBtn').textContent = t('stop');
     startMagnetometer();
-    setStatus('Scan en cours… balayez lentement', 'ok');
+    holdUntil = 0;
+    setStatus('scanning', 'ok');
     requestAnimationFrame(loop);
   }
 
   function stop() {
     running = false;
-    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (stream) stream.getTracks().forEach(x => x.stop());
     stream = null; track = null; torchOn = false;
-    $('torchBtn').classList.remove('on'); $('torchBtn').disabled = true; $('snapBtn').disabled = true;
-    $('startBtn').textContent = '▶ Démarrer le scan';
+    video.srcObject = null;
+    $('torchBtn').classList.remove('on');
+    ['torchBtn', 'snapBtn', 'switchBtn'].forEach(id => ($(id).disabled = true));
+    $('startBtn').textContent = t('start');
     octx.clearRect(0, 0, overlay.width, overlay.height);
-    setStatus('Scan arrêté', 'idle');
+    setStatus('stopped', 'idle');
+  }
+
+  async function switchCamera() {
+    if (!running) return;
+    facing = facing === 'environment' ? 'user' : 'environment';
+    try { await openCamera(); }
+    catch (err) { facing = facing === 'environment' ? 'user' : 'environment'; setStatus('cameraError', 'alert', { e: err.message || err.name }, 4000); }
   }
 
   async function toggleTorch() {
     if (!track) return;
+    const want = !torchOn;
     try {
-      torchOn = !torchOn;
-      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+      await track.applyConstraints({ advanced: [{ torch: want }] });
+      torchOn = want;
       $('torchBtn').classList.toggle('on', torchOn);
-    } catch (e) { torchOn = false; setStatus('Impossible d\'allumer la lampe', 'alert'); }
+    } catch (e) { setStatus('torchFail', 'alert', null, 3000); }
   }
+
+  // Couper la caméra quand l'application passe en arrière-plan (vie privée + batterie).
+  document.addEventListener('visibilitychange', () => { if (document.hidden && running) stop(); });
 
   // ---------- Boucle d'analyse ----------
   let lastProc = 0;
   function loop(ts) {
     if (!running) return;
     requestAnimationFrame(loop);
-    if (ts - lastProc < 66 || !video.videoWidth) return; // ~15 analyses / seconde
+    if (ts - lastProc < 66 || !video.videoWidth || video.readyState < 2) return; // ~15 analyses / seconde
     lastProc = ts;
 
     const vw = video.videoWidth, vh = video.videoHeight;
     const pw = PROC_W, ph = Math.round(PROC_W * vh / vw);
-    if (work.width !== pw) { work.width = pw; work.height = ph; }
+    if (work.width !== pw || work.height !== ph) { work.width = pw; work.height = ph; tracker = new Detector.Tracker({ minHits: MIN_HITS }); }
     wctx.drawImage(video, 0, 0, pw, ph);
-    const img = wctx.getImageData(0, 0, pw, ph);
-    const res = Detector.analyze(img, { mode: $('mode').value, sensitivity: +$('sens').value });
+    let img;
+    try { img = wctx.getImageData(0, 0, pw, ph); } catch (e) { return; }
+    const mode = $('mode').value;
+    const res = Detector.analyze(img, { mode, sensitivity: +$('sens').value });
     const confirmed = tracker.update(res.blobs);
 
     drawOverlay(res.blobs, confirmed, pw, ph);
 
     if (confirmed.length) {
-      const label = $('mode').value === 'ir' ? 'LED infrarouge suspecte !' : 'Objectif de caméra suspect !';
-      setStatus('⚠️ ' + label + ' (' + confirmed.length + ')', 'alert');
+      setStatus(mode === 'ir' ? 'alertIR' : 'alertLens', 'alert', { count: confirmed.length });
       const now = Date.now();
-      if ($('sound').checked && now - lastAlert > 1500) { beep(); if (navigator.vibrate) navigator.vibrate([150, 80, 150]); lastAlert = now; }
-      const fresh = confirmed.filter(t => !t.shot);
+      if ($('sound').checked && now - lastAlert > 1500) { beep(); vibrate(); lastAlert = now; }
+      const fresh = confirmed.filter(x => !x.shot);
       if ($('autoShot').checked && fresh.length && now - lastShot > 2500) {
-        fresh.forEach(t => (t.shot = true));
-        takePhoto(confirmed, pw, ph, true);
+        fresh.forEach(x => (x.shot = true));
+        takePhoto(confirmed, pw, true);
         lastShot = now;
       }
     } else if (res.noisy) {
-      setStatus('Trop de reflets ici (surface brillante) — changez d\'angle', 'idle');
+      setStatus('noisy', 'idle');
     } else {
-      setStatus('Scan en cours… rien de suspect', 'ok');
+      setStatus('nothing', 'ok');
     }
   }
 
@@ -115,13 +173,15 @@
     const W = overlay.clientWidth, H = overlay.clientHeight;
     const scale = Math.max(W / pw, H / ph);
     const ox = (W - pw * scale) / 2, oy = (H - ph * scale) / 2;
-    return { W, H, f: (x, y) => [ox + x * scale, oy + y * scale], scale };
+    return { W, H, scale, f: (x, y) => [ox + x * scale, oy + y * scale] };
   }
 
   function drawOverlay(blobs, confirmed, pw, ph) {
     const dpr = window.devicePixelRatio || 1;
     const m = mapper(pw, ph);
-    if (overlay.width !== Math.round(m.W * dpr)) { overlay.width = Math.round(m.W * dpr); overlay.height = Math.round(m.H * dpr); }
+    if (!m.W || !m.H) return;
+    const cw = Math.round(m.W * dpr), ch = Math.round(m.H * dpr);
+    if (overlay.width !== cw || overlay.height !== ch) { overlay.width = cw; overlay.height = ch; }
     octx.setTransform(dpr, 0, 0, dpr, 0, 0);
     octx.clearRect(0, 0, m.W, m.H);
     octx.lineWidth = 2;
@@ -132,119 +192,171 @@
     }
     octx.lineWidth = 4; octx.strokeStyle = '#ef4444'; octx.fillStyle = '#ef4444';
     octx.font = 'bold 14px system-ui';
-    for (const t of confirmed) {
-      const [x, y] = m.f(t.x, t.y);
-      const r = Math.max(16, t.r * m.scale + 14);
+    octx.direction = 'ltr'; octx.textAlign = 'left';
+    for (const c of confirmed) {
+      const [x, y] = m.f(c.x, c.y);
+      const r = Math.max(16, c.r * m.scale + 14);
       octx.beginPath(); octx.arc(x, y, r, 0, Math.PI * 2); octx.stroke();
-      octx.fillText(Math.round(t.score * 100) + '%', x + r + 4, y + 5);
+      octx.fillText(Math.round(c.score * 100) + '%', x + r + 4, y + 5);
     }
   }
 
   // ---------- Photo ----------
-  function takePhoto(marks, pw, ph, auto) {
+  function takePhoto(marks, pw, auto) {
     if (!video.videoWidth) return;
     const c = document.createElement('canvas');
     c.width = video.videoWidth; c.height = video.videoHeight;
     const ctx = c.getContext('2d');
     ctx.drawImage(video, 0, 0);
-    const k = c.width / pw;
-    ctx.lineWidth = Math.max(4, c.width / 200); ctx.strokeStyle = '#ef4444';
-    for (const t of marks || []) {
-      ctx.beginPath(); ctx.arc(t.x * k, t.y * k, Math.max(30, t.r * k * 3), 0, Math.PI * 2); ctx.stroke();
+    marks = marks || [];
+    if (marks.length && pw) {
+      const k = c.width / pw;
+      ctx.lineWidth = Math.max(4, c.width / 200); ctx.strokeStyle = '#ef4444';
+      for (const m of marks) { ctx.beginPath(); ctx.arc(m.x * k, m.y * k, Math.max(30, m.r * k * 3), 0, Math.PI * 2); ctx.stroke(); }
     }
     const date = new Date();
+    const modeKey = $('mode').value === 'ir' ? 'modeNameIR' : 'modeNameReflect';
+    const info = marks.length ? { key: 'photoPoints', n: marks.length, m: modeKey } : { key: 'photoManual' };
     const fs = Math.max(18, c.width / 45);
-    ctx.font = 'bold ' + fs + 'px system-ui';
+    ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, c.height - fs * 1.8, c.width, fs * 1.8);
     ctx.fillStyle = '#fff';
-    const what = marks && marks.length ? (marks.length + ' point(s) suspect(s) — ' + ($('mode').value === 'ir' ? 'infrarouge' : 'reflet d\'objectif')) : 'Photo manuelle';
-    ctx.fillText(date.toLocaleString('fr-FR') + '  •  ' + what, fs * 0.5, c.height - fs * 0.6);
+    const rtl = document.documentElement.dir === 'rtl';
+    ctx.direction = rtl ? 'rtl' : 'ltr'; ctx.textAlign = 'start';
+    ctx.fillText(date.toLocaleString(I18N.lang) + '  •  ' + infoText(info), rtl ? c.width - fs * 0.5 : fs * 0.5, c.height - fs * 0.6, c.width - fs);
 
-    $('flash').style.opacity = .8; setTimeout(() => ($('flash').style.opacity = 0), 120);
+    $('flash').style.opacity = 0.8; setTimeout(() => ($('flash').style.opacity = 0), 120);
     c.toBlob(blob => {
-      savePhoto({ blob, date: date.toISOString(), info: what, auto: !!auto, mag: lastMag })
-        .then(updateCount).catch(() => setStatus('Impossible d\'enregistrer la photo', 'alert'));
+      if (!blob) { setStatus('saveFail', 'alert', null, 3000); return; }
+      savePhoto({ blob, date: date.toISOString(), info, auto: !!auto })
+        .then(updateCount)
+        .catch(() => setStatus('saveFail', 'alert', null, 3000));
     }, 'image/jpeg', 0.9);
+  }
+  function infoText(info) {
+    if (!info) return '';
+    if (typeof info === 'string') return info; // anciennes photos
+    return info.key === 'photoPoints' ? t('photoPoints', { n: info.n, m: t(info.m) }) : t(info.key);
   }
 
   // ---------- Stockage local (IndexedDB) ----------
   let dbp = null;
   function db() {
-    if (!dbp) dbp = new Promise((res, rej) => {
-      const r = indexedDB.open('detecteur', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-    });
+    if (!dbp) {
+      dbp = new Promise((res, rej) => {
+        if (!window.indexedDB) return rej(new Error('no indexedDB'));
+        const r = indexedDB.open('detecteur', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+      dbp.catch(() => { dbp = null; });
+    }
     return dbp;
   }
-  function store(mode) { return db().then(d => d.transaction('photos', mode).objectStore('photos')); }
-  function req(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
-  const savePhoto = p => store('readwrite').then(s => req(s.add(p)));
-  const allPhotos = () => store('readonly').then(s => req(s.getAll()));
-  const delPhoto = id => store('readwrite').then(s => req(s.delete(id)));
-  const clearPhotos = () => store('readwrite').then(s => req(s.clear()));
+  function run(mode, fn) {
+    return db().then(d => new Promise((res, rej) => {
+      const tx = d.transaction('photos', mode);
+      const r = fn(tx.objectStore('photos'));
+      tx.oncomplete = () => res(r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+    }));
+  }
+  const savePhoto = p => run('readwrite', s => s.add(p));
+  const allPhotos = () => run('readonly', s => s.getAll());
+  const delPhoto = id => run('readwrite', s => s.delete(id));
+  const clearPhotos = () => run('readwrite', s => s.clear());
 
   function updateCount() { allPhotos().then(l => ($('photoCount').textContent = l.length)).catch(() => {}); }
 
   let urls = [];
   async function renderGallery() {
+    const g = $('gallery');
+    let list;
+    try { list = (await allPhotos()).reverse(); }
+    catch (e) { g.textContent = t('storageFail'); return; }
     urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
-    const g = $('gallery'); g.innerHTML = '';
-    const list = (await allPhotos()).reverse();
-    if (!list.length) { g.innerHTML = '<p class="small">Aucune photo pour le moment.</p>'; return; }
+    g.innerHTML = '';
+    if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = t('noPhotos'); g.appendChild(p); return; }
     for (const p of list) {
       const u = URL.createObjectURL(p.blob); urls.push(u);
+      const name = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg';
       const el = document.createElement('div'); el.className = 'shot';
-      el.innerHTML = '<a href="' + u + '" target="_blank"><img src="' + u + '" alt="détection"></a>' +
-        '<div class="meta"></div><div class="acts"><button data-a="save">💾 Enregistrer</button><button data-a="del">🗑</button></div>';
-      el.querySelector('.meta').textContent = new Date(p.date).toLocaleString('fr-FR') + ' — ' + p.info + (p.auto ? ' (auto)' : '');
-      el.querySelector('[data-a=save]').onclick = () => {
-        const a = document.createElement('a'); a.href = u;
-        a.download = 'detection-' + p.date.replace(/[:.]/g, '-') + '.jpg'; a.click();
-      };
-      el.querySelector('[data-a=del]').onclick = async () => { await delPhoto(p.id); renderGallery(); updateCount(); };
+      const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener';
+      const im = document.createElement('img'); im.src = u; im.alt = ''; a.appendChild(im);
+      const meta = document.createElement('div'); meta.className = 'meta';
+      meta.textContent = new Date(p.date).toLocaleString(I18N.lang) + ' — ' + infoText(p.info) + (p.auto ? ' ' + t('auto') : '');
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const bSave = document.createElement('button'); bSave.textContent = t('save');
+      bSave.onclick = () => { const d = document.createElement('a'); d.href = u; d.download = name; document.body.appendChild(d); d.click(); d.remove(); };
+      acts.appendChild(bSave);
+      const file = (typeof File === 'function') ? new File([p.blob], name, { type: 'image/jpeg' }) : null;
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const bShare = document.createElement('button'); bShare.textContent = t('share');
+        bShare.onclick = () => navigator.share({ files: [file] }).catch(() => {});
+        acts.appendChild(bShare);
+      }
+      const bDel = document.createElement('button'); bDel.textContent = '🗑'; bDel.setAttribute('aria-label', 'delete');
+      bDel.onclick = async () => { try { await delPhoto(p.id); } catch (e) {} renderGallery(); updateCount(); };
+      acts.appendChild(bDel);
+      el.append(a, meta, acts);
       g.appendChild(el);
     }
   }
-  $('clearBtn').onclick = async () => { if (confirm('Effacer toutes les photos ?')) { await clearPhotos(); renderGallery(); updateCount(); } };
+  $('clearBtn').onclick = async () => {
+    if (!confirm(t('confirmClear'))) return;
+    try { await clearPhotos(); } catch (e) {}
+    renderGallery(); updateCount();
+  };
 
-  // ---------- Son ----------
-  function initAudio() { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {} }
+  // ---------- Son et vibration ----------
+  function initAudio() {
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) { audioCtx = null; }
+  }
   function beep() {
     if (!audioCtx) return;
-    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.frequency.value = 1200; o.type = 'square'; g.gain.value = 0.08;
-    o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15);
+    try {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 1200; o.type = 'square'; g.gain.value = 0.08;
+      o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {}
   }
+  function vibrate() { try { if (navigator.vibrate) navigator.vibrate([150, 80, 150]); } catch (e) {} }
 
   // ---------- Magnétomètre (micros / électronique) ----------
-  let lastMag = null, magBase = null, magStarted = false;
+  let mag = { state: 'init', v: 0, d: 0, err: '' }, magBase = null, magStarted = false;
+  function renderMag() {
+    let s;
+    if (mag.state === 'init') s = t('magInit');
+    else if (mag.state === 'unsupported') s = t('magNotSupported');
+    else if (mag.state === 'error') s = t('magUnavailable', { e: mag.err });
+    else s = t('magField', { v: mag.v, d: mag.d }) + (mag.d > 25 ? t('magWarn') : '');
+    $('magInfo').textContent = s;
+  }
   function startMagnetometer() {
     if (magStarted) return;
-    if (!('Magnetometer' in window)) {
-      $('magInfo').textContent = 'Magnétomètre non accessible depuis le navigateur sur ce téléphone (sur Android/Chrome, il faut activer chrome://flags → « Generic Sensor Extra Classes »).';
-      return;
-    }
+    if (!('Magnetometer' in window)) { mag.state = 'unsupported'; renderMag(); return; }
     try {
-      const mag = new Magnetometer({ frequency: 10 });
-      mag.addEventListener('reading', () => {
-        const v = Math.hypot(mag.x, mag.y, mag.z);
+      const sensor = new Magnetometer({ frequency: 10 });
+      sensor.addEventListener('reading', () => {
+        const v = Math.hypot(sensor.x, sensor.y, sensor.z);
+        if (!isFinite(v)) return;
         magBase = magBase == null ? v : magBase * 0.995 + v * 0.005; // champ terrestre moyen
-        const delta = Math.abs(v - magBase);
-        lastMag = Math.round(v);
-        $('magBar').style.width = Math.min(100, delta * 2) + '%';
-        $('magInfo').textContent = 'Champ : ' + Math.round(v) + ' µT  •  écart : ' + Math.round(delta) + ' µT' + (delta > 25 ? '  ⚠️ électronique/métal proche !' : '');
-        if (delta > 25 && running && $('sound').checked && Date.now() - lastAlert > 1500) { beep(); lastAlert = Date.now(); }
+        const d = Math.abs(v - magBase);
+        mag = { state: 'ok', v: Math.round(v), d: Math.round(d), err: '' };
+        $('magBar').style.width = Math.min(100, d * 2) + '%';
+        renderMag();
+        if (d > 25 && running && $('sound').checked && Date.now() - lastAlert > 1500) { beep(); lastAlert = Date.now(); }
       });
-      mag.addEventListener('error', e => { $('magInfo').textContent = 'Magnétomètre indisponible : ' + e.error.name; });
-      mag.start(); magStarted = true;
-    } catch (e) { $('magInfo').textContent = 'Magnétomètre indisponible : ' + e.message; }
+      sensor.addEventListener('error', e => { mag = { state: 'error', err: (e.error && e.error.name) || '?' }; renderMag(); });
+      sensor.start(); magStarted = true;
+    } catch (e) { mag = { state: 'error', err: e.name || e.message }; renderMag(); }
   }
 
   $('startBtn').onclick = start;
   $('torchBtn').onclick = toggleTorch;
-  $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(t => t.hits >= tracker.minHits), work.width, work.height, false);
+  $('switchBtn').onclick = switchCamera;
+  $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(x => x.hits >= MIN_HITS && x.miss === 0), work.width, false);
 
+  refreshTexts();
   updateCount();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
