@@ -62,6 +62,7 @@ test('toutes les langues ont toutes les traductions', () => {
       assert.ok(dict[k] != null && dict[k] !== '', code + ' : clé manquante ' + k);
     }
     assert.strictEqual(dict.guide.length, T.fr.guide.length, code + ' : guide incomplet');
+    for (const k of ['permAndroid', 'permIOS', 'permDesktop']) assert.strictEqual(dict[k].length, T.fr[k].length, code + ' : ' + k + ' incomplet');
     for (const k of ['photoPoints', 'magField', 'cameraError', 'magUnavailable']) {
       const want = (T.fr[k].match(/\{\w+\}/g) || []).sort().join();
       assert.strictEqual((dict[k].match(/\{\w+\}/g) || []).sort().join(), want, code + ' : variables de ' + k);

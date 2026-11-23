@@ -74,10 +74,39 @@
     tracker = new Detector.Tracker({ minHits: MIN_HITS });
   }
 
+  // ---------- Aide « autoriser la caméra » ----------
+  // Un site web ne peut pas ouvrir les réglages du téléphone : on affiche les étapes exactes
+  // pour l'appareil, et le scan démarre tout seul dès que la caméra est autorisée.
+  const ua = navigator.userAgent || '';
+  const platform = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'ios'
+    : /Android/.test(ua) ? 'android' : 'desktop';
+  const isMobile = platform !== 'desktop';
+  function renderPermHelp() {
+    const ol = $('permSteps'); ol.innerHTML = '';
+    const steps = location.protocol === 'file:' && isMobile ? [t('permFile')]
+      : t(platform === 'ios' ? 'permIOS' : platform === 'android' ? 'permAndroid' : 'permDesktop');
+    steps.forEach(x => { const li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
+  }
+  function showPermHelp() { renderPermHelp(); $('permHelp').hidden = false; $('permRetry').focus(); }
+  function hidePermHelp() { $('permHelp').hidden = true; }
+  $('permRetry').onclick = () => { hidePermHelp(); start(); };
+  $('permClose').onclick = hidePermHelp;
+  document.addEventListener('langchange', () => { if (!$('permHelp').hidden) renderPermHelp(); });
+  // Dès que la caméra est autorisée dans les réglages, on démarre le scan automatiquement.
+  try {
+    navigator.permissions.query({ name: 'camera' }).then(ps => {
+      ps.onchange = () => { if (ps.state === 'granted' && !$('permHelp').hidden && !running) { hidePermHelp(); start(); } };
+    }).catch(() => {});
+  } catch (e) {}
+
   async function start() {
     if (starting) return;
     if (running) { stop(); return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus('noCamera', 'alert', null, 6000); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('noCamera', 'alert', null, 6000);
+      if (location.protocol === 'file:' || !window.isSecureContext) showPermHelp();
+      return;
+    }
     starting = true;
     initAudio();
     try {
@@ -86,8 +115,10 @@
       starting = false;
       const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
       setStatus(denied ? 'cameraDenied' : 'cameraError', 'alert', { e: (err && (err.message || err.name)) || '?' }, 6000);
+      showPermHelp();
       return;
     }
+    hidePermHelp();
     starting = false;
     running = true;
     $('snapBtn').disabled = false;
@@ -129,7 +160,15 @@
   }
 
   // Couper la caméra quand l'application passe en arrière-plan (vie privée + batterie).
-  document.addEventListener('visibilitychange', () => { if (document.hidden && running) stop(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && running) stop();
+    // Retour depuis les réglages du téléphone : on réessaie tout seul.
+    else if (!document.hidden && !$('permHelp').hidden && !running) {
+      try {
+        navigator.permissions.query({ name: 'camera' }).then(ps => { if (ps.state === 'granted') { hidePermHelp(); start(); } }).catch(() => {});
+      } catch (e) {}
+    }
+  });
 
   // ---------- Boucle d'analyse ----------
   let lastProc = 0;

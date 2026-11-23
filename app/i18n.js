@@ -324,6 +324,83 @@
     }
   };
 
+  // Aide pour autoriser la caméra (un site web ne peut pas ouvrir les réglages lui-même).
+  const PERM = {
+    fr: {
+      permTitle: '📷 Autoriser la caméra',
+      permIntro: "Pour votre sécurité, aucune page web ne peut ouvrir elle-même les réglages. Suivez ces étapes, le scan démarrera tout seul dès que la caméra sera autorisée :",
+      permAndroid: ["En haut de Chrome, touchez l'icône à gauche de l'adresse (🔒 ou ⚙️).", "Touchez « Autorisations », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages du téléphone → Applications → Chrome → Autorisations → Caméra → Autoriser."],
+      permIOS: ["Dans Safari, touchez « aA » à gauche de l'adresse.", "Touchez « Réglages du site web », puis « Caméra ».", "Choisissez « Autoriser ».", "Si ça ne marche toujours pas : Réglages de l'iPhone → Safari → Caméra → Autoriser."],
+      permDesktop: ["Cliquez sur l'icône à gauche de l'adresse (🔒 ou ⓘ).", "À côté de « Caméra », choisissez « Autoriser ».", "Fermez les autres applications qui utilisent la webcam (Zoom, Teams…)."],
+      permFile: "La caméra est bloquée car l'application est ouverte comme un fichier. Sur téléphone, ouvrez-la depuis son adresse en ligne (https://…).",
+      retry: '🔄 Réessayer', close: 'Fermer'
+    },
+    en: {
+      permTitle: '📷 Allow the camera',
+      permIntro: 'For your security, no web page can open the settings by itself. Follow these steps; the scan will start automatically as soon as the camera is allowed:',
+      permAndroid: ['At the top of Chrome, tap the icon to the left of the address (🔒 or ⚙️).', 'Tap “Permissions”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: phone Settings → Apps → Chrome → Permissions → Camera → Allow.'],
+      permIOS: ['In Safari, tap “aA” to the left of the address.', 'Tap “Website Settings”, then “Camera”.', 'Choose “Allow”.', 'If it still does not work: iPhone Settings → Safari → Camera → Allow.'],
+      permDesktop: ['Click the icon to the left of the address (🔒 or ⓘ).', 'Next to “Camera”, choose “Allow”.', 'Close other apps using the webcam (Zoom, Teams…).'],
+      permFile: 'The camera is blocked because the app was opened as a file. On a phone, open it from its online address (https://…).',
+      retry: '🔄 Try again', close: 'Close'
+    },
+    de: {
+      permTitle: '📷 Kamera erlauben',
+      permIntro: 'Aus Sicherheitsgründen kann keine Webseite die Einstellungen selbst öffnen. Folgen Sie diesen Schritten – der Scan startet automatisch, sobald die Kamera erlaubt ist:',
+      permAndroid: ['Tippen Sie oben in Chrome auf das Symbol links neben der Adresse (🔒 oder ⚙️).', 'Tippen Sie auf „Berechtigungen“ und dann auf „Kamera“.', 'Wählen Sie „Zulassen“.', 'Falls es immer noch nicht geht: Handy-Einstellungen → Apps → Chrome → Berechtigungen → Kamera → Zulassen.'],
+      permIOS: ['Tippen Sie in Safari links neben der Adresse auf „aA“.', 'Tippen Sie auf „Website-Einstellungen“ und dann auf „Kamera“.', 'Wählen Sie „Erlauben“.', 'Falls es immer noch nicht geht: iPhone-Einstellungen → Safari → Kamera → Erlauben.'],
+      permDesktop: ['Klicken Sie auf das Symbol links neben der Adresse (🔒 oder ⓘ).', 'Wählen Sie neben „Kamera“ die Option „Zulassen“.', 'Schließen Sie andere Apps, die die Webcam nutzen (Zoom, Teams…).'],
+      permFile: 'Die Kamera ist blockiert, weil die App als Datei geöffnet wurde. Öffnen Sie sie auf dem Handy über ihre Online-Adresse (https://…).',
+      retry: '🔄 Erneut versuchen', close: 'Schließen'
+    },
+    es: {
+      permTitle: '📷 Permitir la cámara',
+      permIntro: 'Por su seguridad, ninguna página web puede abrir los ajustes por sí misma. Siga estos pasos; el escaneo empezará solo en cuanto se permita la cámara:',
+      permAndroid: ['En la parte superior de Chrome, toque el icono a la izquierda de la dirección (🔒 o ⚙️).', 'Toque «Permisos» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del teléfono → Aplicaciones → Chrome → Permisos → Cámara → Permitir.'],
+      permIOS: ['En Safari, toque «aA» a la izquierda de la dirección.', 'Toque «Ajustes del sitio web» y luego «Cámara».', 'Elija «Permitir».', 'Si sigue sin funcionar: Ajustes del iPhone → Safari → Cámara → Permitir.'],
+      permDesktop: ['Haga clic en el icono a la izquierda de la dirección (🔒 o ⓘ).', 'Junto a «Cámara», elija «Permitir».', 'Cierre otras aplicaciones que usen la webcam (Zoom, Teams…).'],
+      permFile: 'La cámara está bloqueada porque la aplicación se abrió como archivo. En el teléfono, ábrala desde su dirección en línea (https://…).',
+      retry: '🔄 Reintentar', close: 'Cerrar'
+    },
+    it: {
+      permTitle: '📷 Consenti la fotocamera',
+      permIntro: 'Per la tua sicurezza, nessuna pagina web può aprire da sola le impostazioni. Segui questi passaggi: la scansione partirà da sola appena la fotocamera sarà consentita:',
+      permAndroid: ['In alto in Chrome, tocca l’icona a sinistra dell’indirizzo (🔒 o ⚙️).', 'Tocca «Autorizzazioni», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni del telefono → App → Chrome → Autorizzazioni → Fotocamera → Consenti.'],
+      permIOS: ['In Safari, tocca «aA» a sinistra dell’indirizzo.', 'Tocca «Impostazioni sito web», poi «Fotocamera».', 'Scegli «Consenti».', 'Se ancora non funziona: Impostazioni iPhone → Safari → Fotocamera → Consenti.'],
+      permDesktop: ['Fai clic sull’icona a sinistra dell’indirizzo (🔒 o ⓘ).', 'Accanto a «Fotocamera», scegli «Consenti».', 'Chiudi le altre app che usano la webcam (Zoom, Teams…).'],
+      permFile: 'La fotocamera è bloccata perché l’app è stata aperta come file. Sul telefono, aprila dal suo indirizzo online (https://…).',
+      retry: '🔄 Riprova', close: 'Chiudi'
+    },
+    pt: {
+      permTitle: '📷 Permitir a câmara',
+      permIntro: 'Por segurança, nenhuma página web pode abrir as definições sozinha. Siga estes passos; a análise começa sozinha assim que a câmara for permitida:',
+      permAndroid: ['No topo do Chrome, toque no ícone à esquerda do endereço (🔒 ou ⚙️).', 'Toque em «Autorizações» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do telemóvel → Aplicações → Chrome → Autorizações → Câmara → Permitir.'],
+      permIOS: ['No Safari, toque em «aA» à esquerda do endereço.', 'Toque em «Definições do site» e depois em «Câmara».', 'Escolha «Permitir».', 'Se ainda não funcionar: Definições do iPhone → Safari → Câmara → Permitir.'],
+      permDesktop: ['Clique no ícone à esquerda do endereço (🔒 ou ⓘ).', 'Ao lado de «Câmara», escolha «Permitir».', 'Feche outras aplicações que usem a webcam (Zoom, Teams…).'],
+      permFile: 'A câmara está bloqueada porque a aplicação foi aberta como ficheiro. No telemóvel, abra-a a partir do endereço online (https://…).',
+      retry: '🔄 Tentar novamente', close: 'Fechar'
+    },
+    tr: {
+      permTitle: '📷 Kameraya izin verin',
+      permIntro: 'Güvenliğiniz için hiçbir web sayfası ayarları kendi başına açamaz. Bu adımları izleyin; kameraya izin verilir verilmez tarama kendiliğinden başlar:',
+      permAndroid: ['Chrome’un üst kısmında adresin solundaki simgeye (🔒 veya ⚙️) dokunun.', '“İzinler”e, ardından “Kamera”ya dokunun.', '“İzin ver”i seçin.', 'Hâlâ çalışmıyorsa: Telefon Ayarları → Uygulamalar → Chrome → İzinler → Kamera → İzin ver.'],
+      permIOS: ['Safari’de adresin solundaki “aA”ya dokunun.', '“Web Sitesi Ayarları”na, ardından “Kamera”ya dokunun.', '“İzin Ver”i seçin.', 'Hâlâ çalışmıyorsa: iPhone Ayarları → Safari → Kamera → İzin Ver.'],
+      permDesktop: ['Adresin solundaki simgeye (🔒 veya ⓘ) tıklayın.', '“Kamera”nın yanında “İzin ver”i seçin.', 'Web kamerasını kullanan diğer uygulamaları kapatın (Zoom, Teams…).'],
+      permFile: 'Uygulama dosya olarak açıldığı için kamera engellendi. Telefonda uygulamayı çevrimiçi adresinden (https://…) açın.',
+      retry: '🔄 Tekrar dene', close: 'Kapat'
+    },
+    ar: {
+      permTitle: '📷 السماح بالكاميرا',
+      permIntro: 'لأسباب أمنية، لا يمكن لأي صفحة ويب فتح الإعدادات بنفسها. اتبع هذه الخطوات، وسيبدأ الفحص تلقائيًا بمجرد السماح بالكاميرا:',
+      permAndroid: ['في أعلى كروم، اضغط على الرمز الموجود يسار العنوان (🔒 أو ⚙️).', 'اضغط على «الأذونات» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات الهاتف ← التطبيقات ← Chrome ← الأذونات ← الكاميرا ← السماح.'],
+      permIOS: ['في سفاري، اضغط على «aA» يسار العنوان.', 'اضغط على «إعدادات موقع الويب» ثم «الكاميرا».', 'اختر «السماح».', 'إذا لم ينجح ذلك: إعدادات iPhone ← Safari ← الكاميرا ← السماح.'],
+      permDesktop: ['انقر على الرمز الموجود يسار العنوان (🔒 أو ⓘ).', 'بجانب «الكاميرا»، اختر «السماح».', 'أغلق التطبيقات الأخرى التي تستخدم كاميرا الويب (Zoom وTeams…).'],
+      permFile: 'الكاميرا محظورة لأن التطبيق فُتح كملف. على الهاتف، افتحه من عنوانه على الإنترنت (https://…).',
+      retry: '🔄 إعادة المحاولة', close: 'إغلاق'
+    }
+  };
+  for (const k in PERM) Object.assign(T[k], PERM[k]);
+
   let lang = 'fr';
   function detect() {
     let saved = null;
