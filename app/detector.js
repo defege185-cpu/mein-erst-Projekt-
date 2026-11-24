@@ -81,6 +81,17 @@
       if (!bn) return false;
       const bg = bsum / bn;
       const thr = bg + 0.5 * (peak - bg);
+      // Netteté : un objectif (ou une LED) donne un point très net. Un reflet sur une surface
+      // lisse et bombée (bouton en métal, bord de plastique) s'étale doucement autour du centre.
+      const rr = size <= 3 ? 2 : Math.round(size / 2) + 1;
+      let ssum = 0, sn = 0;
+      for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== rr) continue;
+        const x = px + dx, y = py + dy;
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        ssum += lum[y * W + x]; sn++;
+      }
+      if (sn && peak - bg > 1 && (ssum / sn - bg) / (peak - bg) > 0.4) return false;
       // Trop de pixels clairs dans l'anneau = structure lumineuse à côté (bord d'écran…).
       let bright = 0; for (const v of ring) if (v >= thr) bright++;
       if (bright / bn > 0.1) return false;
@@ -132,7 +143,8 @@
         }
       }
       const bw = maxX - minX + 1, bh = maxY - minY + 1;
-      if (area < 1 || area > maxArea) continue;          // trop gros = lampe, fenêtre…
+      if (area < 1 || area > maxArea) continue;
+      if (minX <= 1 || minY <= 1 || maxX >= W - 2 || maxY >= H - 2) continue; // coupé par le bord de l'image          // trop gros = lampe, fenêtre…
       if (bw > maxSide || bh > maxSide) continue;
       const aspect = Math.max(bw, bh) / Math.min(bw, bh);
       if (aspect > 2.2) continue;                        // une lentille est ronde
@@ -150,6 +162,15 @@
       blobs.push({ x: cx, y: cy, r: Math.max(bw, bh) / 2 + 1, area, contrast, score });
     }
 
+    // Grappe : 3 points lumineux ou plus très proches = panneau de voyants (machine à café,
+    // box, chargeur…). Une caméra cachée donne un point seul. (En mode infrarouge, au contraire,
+    // un anneau de LED est le signe d'une caméra de vision nocturne : on garde.)
+    if (o.mode !== 'ir' && blobs.length >= 3) {
+      const near = Math.max(20, W / 8);
+      const inCluster = blobs.map(a => blobs.filter(b => b !== a && Math.hypot(a.x - b.x, a.y - b.y) < near).length >= 2);
+      const kept = blobs.filter((b, i) => !inCluster[i] && !blobs.some((c, j) => inCluster[j] && Math.hypot(b.x - c.x, b.y - c.y) < near));
+      blobs.length = 0; kept.forEach(b => blobs.push(b));
+    }
     blobs.sort((a, b) => b.score - a.score);
     // Beaucoup de taches = surface brillante/pailletée : on ne garde que les meilleures.
     const noisy = blobs.length > 25;
