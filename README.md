@@ -39,3 +39,10 @@ Ensuite « Ajouter à l'écran d'accueil » pour l'utiliser comme une vraie appl
 ## Limites
 Aucune application ne détecte 100 % des caméras ou micros. Des fausses alertes sont possibles
 (vis brillantes, bijoux, gouttes d'eau). Vérifiez toujours chaque alerte à l'œil.
+
+---
+
+# Optimiseur PC (Windows 10 / 11)
+Application séparée dans le dossier [`optimiseur-windows`](optimiseur-windows/README.md) : optimise Windows pour
+les jeux et le télétravail sans surchauffe, retire les applications inutiles, chaque changement coché, confirmé et annulable.
+Lancement : double-clic sur `optimiseur-windows/Lancer-Optimiseur.bat`.
