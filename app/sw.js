@@ -1,5 +1,5 @@
-const CACHE = 'detecteur-v3';
-const FILES = ['./', './index.html', './style.css', './app.js', './detector.js', './i18n.js', './manifest.json', './icon.svg'];
+const CACHE = 'detecteur-v4';
+const FILES = ['./', './index.html', './style.css', './app.js', './detector.js', './i18n.js', './i18n-report.js', './report.js', './manifest.json', './icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))));
 self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
