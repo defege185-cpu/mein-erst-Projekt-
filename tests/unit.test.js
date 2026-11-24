@@ -37,9 +37,9 @@ test('ignore une image entièrement blanche', () => {
 test('détecte une LED infrarouge violette dans le noir', () => {
   assert.strictEqual(D.analyze(img(320, 240, [20, 20, 25], [{ x: 200, y: 100, r: 2, c: [200, 120, 230] }]), { mode: 'ir' }).blobs.length, 1);
 });
-test('fonctionne sur les bords de l\'image', () => {
-  const r = D.analyze(img(320, 240, [90, 90, 90], [{ x: 1, y: 1, r: 1, c: WHITE }, { x: 318, y: 238, r: 1, c: WHITE }]));
-  assert.strictEqual(r.blobs.length, 2);
+test('ignore un point coupé par le bord de l\'image, mais détecte juste à côté', () => {
+  assert.strictEqual(D.analyze(img(320, 240, [90, 90, 90], [{ x: 0, y: 1, r: 1, c: WHITE }, { x: 319, y: 238, r: 1, c: WHITE }])).blobs.length, 0);
+  assert.strictEqual(D.analyze(img(320, 240, [90, 90, 90], [{ x: 5, y: 5, r: 1, c: WHITE }, { x: 314, y: 234, r: 1, c: WHITE }])).blobs.length, 2);
 });
 test('le suivi confirme seulement après plusieurs images', () => {
   const tr = new D.Tracker({ minHits: 4 });
@@ -76,6 +76,30 @@ test('détecte toujours une lentille sur un objet sombre (réveil, détecteur…
   rect(im, 140, 100, 180, 130, [30, 30, 30]);                    // boîtier noir
   rect(im, 159, 114, 161, 116, WHITE);                            // reflet de l'objectif
   assert.strictEqual(D.analyze(im).blobs.length, 1);
+});
+
+function gauss(bg, cx, cy, sigma, peak) {
+  const im = img(320, 240, [bg, bg, bg], []);
+  for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) {
+    const v = bg + (peak - bg) * Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma * sigma));
+    const i = (y * 320 + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = v;
+  }
+  return im;
+}
+test('détecte un reflet d\'objectif réaliste, un peu flou', () => {
+  for (const sigma of [0.7, 1, 1.4]) assert.strictEqual(D.analyze(gauss(70, 160, 120, sigma, 255)).blobs.length, 1, 'sigma ' + sigma);
+});
+test('ignore un reflet doux sur une surface bombée (bouton métallique)', () => {
+  assert.strictEqual(D.analyze(gauss(70, 160, 120, 2.6, 255), { sensitivity: 8 }).blobs.length, 0);
+});
+test('ignore un panneau de voyants (3 points ou plus groupés) en mode reflet', () => {
+  const pts = [[150, 100], [162, 103], [174, 100], [158, 118]].map(([x, y]) => ({ x, y, r: 1, c: WHITE }));
+  assert.strictEqual(D.analyze(img(320, 240, [25, 25, 25], pts)).blobs.length, 0);
+  assert.strictEqual(D.analyze(img(320, 240, [25, 25, 25], [{ x: 150, y: 100, r: 1, c: WHITE }])).blobs.length, 1);
+});
+test('garde un anneau de LED en mode infrarouge (caméra de vision nocturne)', () => {
+  const pts = [0, 1, 2, 3, 4, 5].map(k => ({ x: Math.round(160 + 12 * Math.cos(k)), y: Math.round(120 + 12 * Math.sin(k)), r: 1, c: [210, 130, 235] }));
+  assert.ok(D.analyze(img(320, 240, [15, 15, 20], pts), { mode: 'ir' }).blobs.length >= 4);
 });
 
 test('toutes les langues ont toutes les traductions', () => {
