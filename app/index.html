@@ -18,12 +18,17 @@
   <nav>
     <button class="tab active" data-tab="scan"><span data-i18n="tabScan">Scanner</span></button>
     <button class="tab" data-tab="photos"><span data-i18n="tabPhotos">Photos</span> <span id="photoCount">0</span></button>
+    <button class="tab" data-tab="report"><span data-i18n="tabReport">Rapport</span></button>
     <button class="tab" data-tab="guide"><span data-i18n="tabGuide">Guide</span></button>
   </nav>
 </header>
 
 <main>
   <section id="scan" class="panel active">
+    <div id="roomBar" class="roombar" hidden>
+      <span id="roomBarName"></span>
+      <button id="roomDoneBtn" class="primary" data-i18n="roomFinish"></button>
+    </div>
     <div id="viewer">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="overlay"></canvas>
@@ -69,6 +74,33 @@
     <div id="gallery"></div>
   </section>
 
+  <section id="report" class="panel">
+    <h2 data-i18n="repTitle"></h2>
+    <div id="reportNew">
+      <p class="small" data-i18n="repIntro"></p>
+      <div class="settings">
+        <label><span data-i18n="repProperty"></span><input id="repProperty" type="text" maxlength="80" data-i18n-ph="repPropertyPh" autocomplete="off"></label>
+        <label><span data-i18n="repAddress"></span><input id="repAddress" type="text" maxlength="120" autocomplete="off"></label>
+        <label><span data-i18n="repBy"></span><input id="repBy" type="text" maxlength="80" autocomplete="off"></label>
+        <button id="repStartBtn" class="primary" data-i18n="repStart"></button>
+      </div>
+    </div>
+    <div id="reportCurrent" hidden>
+      <p><b id="repHead"></b></p>
+      <h3 data-i18n="repRooms"></h3>
+      <ul id="roomList" class="rooms"></ul>
+      <div id="roomSuggest" class="chips"></div>
+      <div class="addroom">
+        <input id="roomName" type="text" maxlength="40" data-i18n-ph="repRoomPh" autocomplete="off">
+        <button id="roomAddBtn" data-i18n="repAddRoom"></button>
+      </div>
+      <button id="repFinishBtn" class="primary wide" data-i18n="repFinish"></button>
+      <button id="repCancelBtn" class="linkbtn" data-i18n="repCancel"></button>
+    </div>
+    <h3 data-i18n="repDone"></h3>
+    <div id="reportList"></div>
+  </section>
+
   <section id="guide" class="panel">
     <h2 data-i18n="guideTitle"></h2>
     <ol id="guideList"></ol>
@@ -88,10 +120,33 @@
   </div>
 </div>
 
+<div id="roomResult" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="resTitle">
+  <div class="modal-box">
+    <h2 id="resTitle"></h2>
+    <p id="resStats" class="small"></p>
+    <label class="radio"><input type="radio" name="roomRes" value="clear"> <span data-i18n="stClear"></span></label>
+    <label class="radio"><input type="radio" name="roomRes" value="false"> <span data-i18n="stFalse"></span></label>
+    <label class="radio"><input type="radio" name="roomRes" value="suspect"> <span data-i18n="stSuspect"></span></label>
+    <label class="note"><span data-i18n="repNote"></span><textarea id="resNote" rows="2" maxlength="300"></textarea></label>
+    <div class="controls"><button id="resSave" class="primary" data-i18n="repSave"></button></div>
+  </div>
+</div>
+
+<div id="reportOverlay" class="repoverlay" hidden>
+  <div class="rep-actions">
+    <button id="repViewPrint" data-i18n="repPrint"></button>
+    <button id="repViewShare" data-i18n="repShare"></button>
+    <button id="repViewClose" data-i18n="close"></button>
+  </div>
+  <div id="reportDoc"></div>
+</div>
+
 <div id="photoViewer" class="viewer" hidden><img id="viewerImg" alt=""><span class="close">✕</span></div>
 
 <script src="i18n.js"></script>
 <script src="detector.js"></script>
+<script src="i18n-report.js"></script>
 <script src="app.js"></script>
+<script src="report.js"></script>
 </body>
 </html>

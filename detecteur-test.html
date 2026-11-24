@@ -61,6 +61,40 @@ ol li { margin-bottom:10px; line-height:1.4; }
 .viewer[hidden] { display:none; }
 .viewer img { max-width:100%; max-height:100%; object-fit:contain; }
 .viewer .close { position:absolute; top:calc(12px + env(safe-area-inset-top)); right:16px; font-size:1.6rem; color:#fff; background:rgba(0,0,0,.5); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+
+/* ----- Rapport de scan ----- */
+.tab { padding:10px 2px; font-size:.9rem; }
+input[type=text], textarea { width:100%; font-size:1rem; padding:8px; background:#0f1728; color:var(--text); border:1px solid #2a3a5c; border-radius:8px; font-family:inherit; }
+h3 { font-size:1rem; margin:18px 0 8px; }
+.roombar { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#1e3a8a; padding:8px 10px; border-radius:10px; margin-bottom:10px; font-weight:600; }
+.roombar button { padding:8px 10px; font-size:.95rem; flex:none; }
+.rooms { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
+.room { background:var(--card); border-radius:10px; padding:10px; }
+.room-top { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.room-acts { display:flex; gap:8px; margin-top:8px; }
+.room-acts button { flex:1; padding:9px 6px; font-size:.95rem; min-width:0; }
+.room-acts button[aria-label] { flex:0 0 52px; }
+.badge { font-size:.78rem; padding:3px 8px; border-radius:10px; font-weight:600; }
+.badge.ok { background:#14532d; color:#bbf7d0; } .badge.warn { background:#713f12; color:#fde68a; }
+.badge.bad { background:#7f1d1d; color:#fecaca; } .badge.idle { background:#334155; color:#cbd5e1; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+.chip { padding:6px 10px; font-size:.88rem; border-radius:16px; }
+.addroom { display:flex; gap:8px; margin-bottom:12px; } .addroom button { flex:none; }
+.wide { width:100%; } .linkbtn { background:none; border:none; color:var(--muted); text-decoration:underline; width:100%; margin-top:6px; font-size:.9rem; }
+.rep-card { display:grid; gap:4px; }
+.radio { display:flex; gap:10px; align-items:center; padding:10px; margin:6px 0; background:#0f1728; border-radius:8px; }
+.radio input { width:20px; height:20px; flex:none; }
+.note { display:grid; gap:4px; margin-top:10px; }
+.repoverlay { position:fixed; inset:0; z-index:25; background:#e5e7eb; overflow:auto; -webkit-overflow-scrolling:touch; }
+.repoverlay[hidden] { display:none; }
+.rep-actions { position:sticky; top:0; display:flex; gap:6px; padding:8px; padding-top:calc(8px + env(safe-area-inset-top)); background:var(--bg); z-index:1; }
+.rep-actions button { flex:1; padding:10px 4px; font-size:.9rem; min-width:0; }
+@media print {
+  body.print-report > *:not(#reportOverlay) { display:none !important; }
+  body.print-report { background:#fff; }
+  body.print-report #reportOverlay { position:static; overflow:visible; background:#fff; }
+  body.print-report .rep-actions { display:none; }
+}
 </style>
 </head>
 <body>
@@ -72,12 +106,17 @@ ol li { margin-bottom:10px; line-height:1.4; }
   <nav>
     <button class="tab active" data-tab="scan"><span data-i18n="tabScan">Scanner</span></button>
     <button class="tab" data-tab="photos"><span data-i18n="tabPhotos">Photos</span> <span id="photoCount">0</span></button>
+    <button class="tab" data-tab="report"><span data-i18n="tabReport">Rapport</span></button>
     <button class="tab" data-tab="guide"><span data-i18n="tabGuide">Guide</span></button>
   </nav>
 </header>
 
 <main>
   <section id="scan" class="panel active">
+    <div id="roomBar" class="roombar" hidden>
+      <span id="roomBarName"></span>
+      <button id="roomDoneBtn" class="primary" data-i18n="roomFinish"></button>
+    </div>
     <div id="viewer">
       <video id="video" playsinline muted autoplay></video>
       <canvas id="overlay"></canvas>
@@ -123,6 +162,33 @@ ol li { margin-bottom:10px; line-height:1.4; }
     <div id="gallery"></div>
   </section>
 
+  <section id="report" class="panel">
+    <h2 data-i18n="repTitle"></h2>
+    <div id="reportNew">
+      <p class="small" data-i18n="repIntro"></p>
+      <div class="settings">
+        <label><span data-i18n="repProperty"></span><input id="repProperty" type="text" maxlength="80" data-i18n-ph="repPropertyPh" autocomplete="off"></label>
+        <label><span data-i18n="repAddress"></span><input id="repAddress" type="text" maxlength="120" autocomplete="off"></label>
+        <label><span data-i18n="repBy"></span><input id="repBy" type="text" maxlength="80" autocomplete="off"></label>
+        <button id="repStartBtn" class="primary" data-i18n="repStart"></button>
+      </div>
+    </div>
+    <div id="reportCurrent" hidden>
+      <p><b id="repHead"></b></p>
+      <h3 data-i18n="repRooms"></h3>
+      <ul id="roomList" class="rooms"></ul>
+      <div id="roomSuggest" class="chips"></div>
+      <div class="addroom">
+        <input id="roomName" type="text" maxlength="40" data-i18n-ph="repRoomPh" autocomplete="off">
+        <button id="roomAddBtn" data-i18n="repAddRoom"></button>
+      </div>
+      <button id="repFinishBtn" class="primary wide" data-i18n="repFinish"></button>
+      <button id="repCancelBtn" class="linkbtn" data-i18n="repCancel"></button>
+    </div>
+    <h3 data-i18n="repDone"></h3>
+    <div id="reportList"></div>
+  </section>
+
   <section id="guide" class="panel">
     <h2 data-i18n="guideTitle"></h2>
     <ol id="guideList"></ol>
@@ -140,6 +206,27 @@ ol li { margin-bottom:10px; line-height:1.4; }
       <button id="permClose" data-i18n="close"></button>
     </div>
   </div>
+</div>
+
+<div id="roomResult" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="resTitle">
+  <div class="modal-box">
+    <h2 id="resTitle"></h2>
+    <p id="resStats" class="small"></p>
+    <label class="radio"><input type="radio" name="roomRes" value="clear"> <span data-i18n="stClear"></span></label>
+    <label class="radio"><input type="radio" name="roomRes" value="false"> <span data-i18n="stFalse"></span></label>
+    <label class="radio"><input type="radio" name="roomRes" value="suspect"> <span data-i18n="stSuspect"></span></label>
+    <label class="note"><span data-i18n="repNote"></span><textarea id="resNote" rows="2" maxlength="300"></textarea></label>
+    <div class="controls"><button id="resSave" class="primary" data-i18n="repSave"></button></div>
+  </div>
+</div>
+
+<div id="reportOverlay" class="repoverlay" hidden>
+  <div class="rep-actions">
+    <button id="repViewPrint" data-i18n="repPrint"></button>
+    <button id="repViewShare" data-i18n="repShare"></button>
+    <button id="repViewClose" data-i18n="close"></button>
+  </div>
+  <div id="reportDoc"></div>
 </div>
 
 <div id="photoViewer" class="viewer" hidden><img id="viewerImg" alt=""><span class="close">✕</span></div>
@@ -557,8 +644,10 @@ ol li { margin-bottom:10px; line-height:1.4; }
     for (const p of prefs) { const c = String(p).slice(0, 2).toLowerCase(); if (T[c]) return c; }
     return 'en';
   }
-  function t(key, vars) {
-    let s = (T[lang] && T[lang][key] != null) ? T[lang][key] : (T.en[key] != null ? T.en[key] : key);
+  function t(key, vars) { return tIn(lang, key, vars); }
+  // Traduction dans une langue précise (ex. le rapport garde la langue choisie à sa création).
+  function tIn(code, key, vars) {
+    let s = (T[code] && T[code][key] != null) ? T[code][key] : (T.en[key] != null ? T.en[key] : key);
     if (vars && typeof s === 'string') s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
     return s;
   }
@@ -567,6 +656,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
     document.documentElement.dir = T[lang]._rtl ? 'rtl' : 'ltr';
     document.title = t('title');
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
     const ol = document.getElementById('guideList');
     if (ol) {
       ol.innerHTML = '';
@@ -583,7 +673,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
     document.dispatchEvent(new CustomEvent('langchange'));
   }
   lang = detect();
-  root.I18N = { t, set, apply, get lang() { return lang; }, languages: Object.keys(T).map(k => ({ code: k, name: T[k]._name })), _T: T };
+  root.I18N = { t, tIn, set, apply, get lang() { return lang; }, languages: Object.keys(T).map(k => ({ code: k, name: T[k]._name })), _T: T };
 })(this);
 </script>
 <script>
@@ -782,9 +872,197 @@ ol li { margin-bottom:10px; line-height:1.4; }
 })(this);
 </script>
 <script>
+// Traductions du mode « Rapport de scan ».
+(function (root) {
+  'use strict';
+  const R = {
+    fr: {
+      repDateSig: 'Date',
+      tabReport: 'Rapport', repTitle: 'Rapport de scan',
+      repIntro: "Vérifiez un logement pièce par pièce et obtenez un rapport daté avec photos, à imprimer ou à partager (location, hôtel, bureau…).",
+      repProperty: 'Nom du logement', repPropertyPh: 'ex. Appartement Les Lilas', repAddress: 'Adresse (facultatif)', repBy: 'Vérifié par (facultatif)',
+      repStart: '▶ Commencer le rapport', repRooms: 'Pièces à vérifier', repAddRoom: '+ Ajouter', repRoomPh: 'Autre pièce…',
+      repSuggest: ['Entrée', 'Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Toilettes', 'Bureau'],
+      repScanRoom: '📷 Scanner', repRescan: '🔁 Refaire', repFinish: '✅ Terminer et créer le rapport', repCancel: 'Abandonner ce rapport',
+      repConfirmCancel: "Abandonner le rapport en cours ? Les photos restent dans l'onglet Photos.",
+      repNeedRoom: 'Scannez au moins une pièce avant de terminer.', repNeedName: 'Indiquez le nom du logement.',
+      repDone: 'Rapports terminés', repNone: 'Aucun rapport terminé pour le moment.',
+      repView: '👁 Voir', repShare: '📤 Partager', repPrint: '🖨 Imprimer / PDF',
+      roomScanning: 'Pièce en cours : {room}', roomFinish: '✔ Pièce terminée', roomResultTitle: 'Résultat : {room}',
+      roomStats: 'Durée {d} • {a} alerte(s) • {p} photo(s)',
+      stClear: 'Rien de suspect détecté', stFalse: "Alerte vérifiée à l'œil : fausse alerte", stSuspect: 'Élément suspect à vérifier', stPending: 'Pas encore scannée',
+      repNote: 'Remarque (facultatif)', repSave: 'Enregistrer',
+      repDocTitle: 'Rapport de vérification — caméras et micros cachés', repStarted: 'Début', repFinished: 'Fin', repId: 'N° du rapport', repSettings: 'Réglages',
+      repSummaryClear: '✅ Aucun élément suspect signalé dans les {n} pièce(s) vérifiée(s).',
+      repSummarySuspect: '⚠️ {s} pièce(s) sur {n} avec un élément suspect à vérifier.',
+      repDisclaimer: "Vérification réalisée avec un outil grand public (Détecteur Caméra & Micro) qui repère les reflets d'objectifs et les LED infrarouges. Ce rapport décrit ce qui a été observé ; il ne garantit pas l'absence de tout dispositif caché.",
+      repShortScan: 'scan court (moins de 20 s)', repSignature: 'Signature', repDeleteConfirm: 'Supprimer ce rapport ?', repGenerating: 'Création du rapport…'
+    },
+    en: {
+      repDateSig: 'Date',
+      tabReport: 'Report', repTitle: 'Scan report',
+      repIntro: 'Check a property room by room and get a dated report with photos to print or share (rental, hotel, office…).',
+      repProperty: 'Property name', repPropertyPh: 'e.g. Lilac Apartment', repAddress: 'Address (optional)', repBy: 'Checked by (optional)',
+      repStart: '▶ Start report', repRooms: 'Rooms to check', repAddRoom: '+ Add', repRoomPh: 'Other room…',
+      repSuggest: ['Entrance', 'Living room', 'Kitchen', 'Bedroom', 'Bathroom', 'Toilet', 'Office'],
+      repScanRoom: '📷 Scan', repRescan: '🔁 Redo', repFinish: '✅ Finish and create report', repCancel: 'Discard this report',
+      repConfirmCancel: 'Discard the current report? The photos stay in the Photos tab.',
+      repNeedRoom: 'Scan at least one room before finishing.', repNeedName: 'Enter the property name.',
+      repDone: 'Finished reports', repNone: 'No finished reports yet.',
+      repView: '👁 View', repShare: '📤 Share', repPrint: '🖨 Print / PDF',
+      roomScanning: 'Current room: {room}', roomFinish: '✔ Room done', roomResultTitle: 'Result: {room}',
+      roomStats: 'Duration {d} • {a} alert(s) • {p} photo(s)',
+      stClear: 'Nothing suspicious detected', stFalse: 'Alert checked by eye: false alarm', stSuspect: 'Suspicious item to check', stPending: 'Not scanned yet',
+      repNote: 'Note (optional)', repSave: 'Save',
+      repDocTitle: 'Inspection report — hidden cameras and microphones', repStarted: 'Start', repFinished: 'End', repId: 'Report no.', repSettings: 'Settings',
+      repSummaryClear: '✅ No suspicious item reported in the {n} room(s) checked.',
+      repSummarySuspect: '⚠️ {s} of {n} room(s) with a suspicious item to check.',
+      repDisclaimer: 'Check carried out with a consumer tool (Camera & Mic Detector) that spots lens reflections and infrared LEDs. This report describes what was observed; it does not guarantee the absence of any hidden device.',
+      repShortScan: 'short scan (under 20 s)', repSignature: 'Signature', repDeleteConfirm: 'Delete this report?', repGenerating: 'Creating report…'
+    },
+    de: {
+      repDateSig: 'Datum',
+      tabReport: 'Bericht', repTitle: 'Scan-Bericht',
+      repIntro: 'Prüfen Sie eine Unterkunft Raum für Raum und erhalten Sie einen datierten Bericht mit Fotos zum Drucken oder Teilen (Ferienwohnung, Hotel, Büro…).',
+      repProperty: 'Name der Unterkunft', repPropertyPh: 'z. B. Ferienwohnung Lindenhof', repAddress: 'Adresse (optional)', repBy: 'Geprüft von (optional)',
+      repStart: '▶ Bericht beginnen', repRooms: 'Zu prüfende Räume', repAddRoom: '+ Hinzufügen', repRoomPh: 'Anderer Raum…',
+      repSuggest: ['Eingang', 'Wohnzimmer', 'Küche', 'Schlafzimmer', 'Badezimmer', 'WC', 'Büro'],
+      repScanRoom: '📷 Scannen', repRescan: '🔁 Wiederholen', repFinish: '✅ Abschließen und Bericht erstellen', repCancel: 'Diesen Bericht verwerfen',
+      repConfirmCancel: 'Den aktuellen Bericht verwerfen? Die Fotos bleiben im Reiter Fotos.',
+      repNeedRoom: 'Scannen Sie mindestens einen Raum, bevor Sie abschließen.', repNeedName: 'Geben Sie den Namen der Unterkunft ein.',
+      repDone: 'Fertige Berichte', repNone: 'Noch keine fertigen Berichte.',
+      repView: '👁 Ansehen', repShare: '📤 Teilen', repPrint: '🖨 Drucken / PDF',
+      roomScanning: 'Aktueller Raum: {room}', roomFinish: '✔ Raum fertig', roomResultTitle: 'Ergebnis: {room}',
+      roomStats: 'Dauer {d} • {a} Alarm(e) • {p} Foto(s)',
+      stClear: 'Nichts Verdächtiges gefunden', stFalse: 'Alarm mit eigenen Augen geprüft: Fehlalarm', stSuspect: 'Verdächtiger Gegenstand – zu prüfen', stPending: 'Noch nicht gescannt',
+      repNote: 'Bemerkung (optional)', repSave: 'Speichern',
+      repDocTitle: 'Prüfbericht – versteckte Kameras und Mikrofone', repStarted: 'Beginn', repFinished: 'Ende', repId: 'Bericht-Nr.', repSettings: 'Einstellungen',
+      repSummaryClear: '✅ In den {n} geprüften Räumen wurde nichts Verdächtiges gemeldet.',
+      repSummarySuspect: '⚠️ {s} von {n} Räumen mit verdächtigem Gegenstand – zu prüfen.',
+      repDisclaimer: 'Prüfung mit einem Verbraucher-Werkzeug (Kamera- & Mikrofon-Detektor), das Linsenreflexionen und Infrarot-LEDs erkennt. Dieser Bericht beschreibt die Beobachtungen; er garantiert nicht, dass keine versteckten Geräte vorhanden sind.',
+      repShortScan: 'kurzer Scan (unter 20 s)', repSignature: 'Unterschrift', repDeleteConfirm: 'Diesen Bericht löschen?', repGenerating: 'Bericht wird erstellt…'
+    },
+    es: {
+      repDateSig: 'Fecha',
+      tabReport: 'Informe', repTitle: 'Informe de escaneo',
+      repIntro: 'Revise un alojamiento habitación por habitación y obtenga un informe fechado con fotos para imprimir o compartir (alquiler, hotel, oficina…).',
+      repProperty: 'Nombre del alojamiento', repPropertyPh: 'p. ej. Apartamento Las Lilas', repAddress: 'Dirección (opcional)', repBy: 'Revisado por (opcional)',
+      repStart: '▶ Empezar el informe', repRooms: 'Habitaciones a revisar', repAddRoom: '+ Añadir', repRoomPh: 'Otra habitación…',
+      repSuggest: ['Entrada', 'Salón', 'Cocina', 'Dormitorio', 'Baño', 'Aseo', 'Despacho'],
+      repScanRoom: '📷 Escanear', repRescan: '🔁 Repetir', repFinish: '✅ Terminar y crear el informe', repCancel: 'Descartar este informe',
+      repConfirmCancel: '¿Descartar el informe en curso? Las fotos se quedan en la pestaña Fotos.',
+      repNeedRoom: 'Escanee al menos una habitación antes de terminar.', repNeedName: 'Indique el nombre del alojamiento.',
+      repDone: 'Informes terminados', repNone: 'Todavía no hay informes terminados.',
+      repView: '👁 Ver', repShare: '📤 Compartir', repPrint: '🖨 Imprimir / PDF',
+      roomScanning: 'Habitación actual: {room}', roomFinish: '✔ Habitación terminada', roomResultTitle: 'Resultado: {room}',
+      roomStats: 'Duración {d} • {a} alerta(s) • {p} foto(s)',
+      stClear: 'Nada sospechoso detectado', stFalse: 'Alerta revisada a simple vista: falsa alarma', stSuspect: 'Elemento sospechoso a revisar', stPending: 'Aún no escaneada',
+      repNote: 'Observación (opcional)', repSave: 'Guardar',
+      repDocTitle: 'Informe de revisión — cámaras y micrófonos ocultos', repStarted: 'Inicio', repFinished: 'Fin', repId: 'N.º de informe', repSettings: 'Ajustes',
+      repSummaryClear: '✅ No se ha señalado ningún elemento sospechoso en las {n} habitación(es) revisada(s).',
+      repSummarySuspect: '⚠️ {s} de {n} habitación(es) con un elemento sospechoso a revisar.',
+      repDisclaimer: 'Revisión realizada con una herramienta de consumo (Detector de Cámaras y Micrófonos) que detecta reflejos de lentes y LED infrarrojos. Este informe describe lo observado; no garantiza la ausencia de cualquier dispositivo oculto.',
+      repShortScan: 'escaneo corto (menos de 20 s)', repSignature: 'Firma', repDeleteConfirm: '¿Eliminar este informe?', repGenerating: 'Creando el informe…'
+    },
+    it: {
+      repDateSig: 'Data',
+      tabReport: 'Rapporto', repTitle: 'Rapporto di scansione',
+      repIntro: 'Controlla un alloggio stanza per stanza e ottieni un rapporto datato con foto da stampare o condividere (affitto, hotel, ufficio…).',
+      repProperty: 'Nome dell’alloggio', repPropertyPh: 'es. Appartamento Le Lillà', repAddress: 'Indirizzo (facoltativo)', repBy: 'Controllato da (facoltativo)',
+      repStart: '▶ Inizia il rapporto', repRooms: 'Stanze da controllare', repAddRoom: '+ Aggiungi', repRoomPh: 'Altra stanza…',
+      repSuggest: ['Ingresso', 'Soggiorno', 'Cucina', 'Camera da letto', 'Bagno', 'WC', 'Studio'],
+      repScanRoom: '📷 Scansiona', repRescan: '🔁 Ripeti', repFinish: '✅ Termina e crea il rapporto', repCancel: 'Annulla questo rapporto',
+      repConfirmCancel: 'Annullare il rapporto in corso? Le foto restano nella scheda Foto.',
+      repNeedRoom: 'Scansiona almeno una stanza prima di terminare.', repNeedName: 'Indica il nome dell’alloggio.',
+      repDone: 'Rapporti completati', repNone: 'Nessun rapporto completato per ora.',
+      repView: '👁 Vedi', repShare: '📤 Condividi', repPrint: '🖨 Stampa / PDF',
+      roomScanning: 'Stanza in corso: {room}', roomFinish: '✔ Stanza completata', roomResultTitle: 'Risultato: {room}',
+      roomStats: 'Durata {d} • {a} allarme/i • {p} foto',
+      stClear: 'Niente di sospetto rilevato', stFalse: 'Allarme verificato a occhio: falso allarme', stSuspect: 'Elemento sospetto da verificare', stPending: 'Non ancora scansionata',
+      repNote: 'Nota (facoltativa)', repSave: 'Salva',
+      repDocTitle: 'Rapporto di verifica — telecamere e microfoni nascosti', repStarted: 'Inizio', repFinished: 'Fine', repId: 'N. rapporto', repSettings: 'Impostazioni',
+      repSummaryClear: '✅ Nessun elemento sospetto segnalato nelle {n} stanze controllate.',
+      repSummarySuspect: '⚠️ {s} stanze su {n} con un elemento sospetto da verificare.',
+      repDisclaimer: 'Verifica effettuata con uno strumento per il grande pubblico (Rilevatore di Telecamere e Microfoni) che individua i riflessi degli obiettivi e i LED a infrarossi. Questo rapporto descrive quanto osservato; non garantisce l’assenza di qualsiasi dispositivo nascosto.',
+      repShortScan: 'scansione breve (meno di 20 s)', repSignature: 'Firma', repDeleteConfirm: 'Eliminare questo rapporto?', repGenerating: 'Creazione del rapporto…'
+    },
+    pt: {
+      repDateSig: 'Data',
+      tabReport: 'Relatório', repTitle: 'Relatório de análise',
+      repIntro: 'Verifique um alojamento divisão a divisão e obtenha um relatório datado com fotos para imprimir ou partilhar (arrendamento, hotel, escritório…).',
+      repProperty: 'Nome do alojamento', repPropertyPh: 'ex. Apartamento Os Lilases', repAddress: 'Morada (opcional)', repBy: 'Verificado por (opcional)',
+      repStart: '▶ Começar o relatório', repRooms: 'Divisões a verificar', repAddRoom: '+ Adicionar', repRoomPh: 'Outra divisão…',
+      repSuggest: ['Entrada', 'Sala', 'Cozinha', 'Quarto', 'Casa de banho', 'WC', 'Escritório'],
+      repScanRoom: '📷 Analisar', repRescan: '🔁 Repetir', repFinish: '✅ Terminar e criar o relatório', repCancel: 'Descartar este relatório',
+      repConfirmCancel: 'Descartar o relatório em curso? As fotos ficam no separador Fotos.',
+      repNeedRoom: 'Analise pelo menos uma divisão antes de terminar.', repNeedName: 'Indique o nome do alojamento.',
+      repDone: 'Relatórios terminados', repNone: 'Ainda não há relatórios terminados.',
+      repView: '👁 Ver', repShare: '📤 Partilhar', repPrint: '🖨 Imprimir / PDF',
+      roomScanning: 'Divisão atual: {room}', roomFinish: '✔ Divisão terminada', roomResultTitle: 'Resultado: {room}',
+      roomStats: 'Duração {d} • {a} alerta(s) • {p} foto(s)',
+      stClear: 'Nada suspeito detetado', stFalse: 'Alerta verificado a olho: falso alarme', stSuspect: 'Elemento suspeito a verificar', stPending: 'Ainda não analisada',
+      repNote: 'Observação (opcional)', repSave: 'Guardar',
+      repDocTitle: 'Relatório de verificação — câmaras e microfones escondidos', repStarted: 'Início', repFinished: 'Fim', repId: 'N.º do relatório', repSettings: 'Definições',
+      repSummaryClear: '✅ Nenhum elemento suspeito assinalado nas {n} divisão(ões) verificada(s).',
+      repSummarySuspect: '⚠️ {s} de {n} divisão(ões) com um elemento suspeito a verificar.',
+      repDisclaimer: 'Verificação feita com uma ferramenta para o grande público (Detetor de Câmaras e Microfones) que deteta reflexos de lentes e LED infravermelhos. Este relatório descreve o que foi observado; não garante a ausência de qualquer dispositivo escondido.',
+      repShortScan: 'análise curta (menos de 20 s)', repSignature: 'Assinatura', repDeleteConfirm: 'Apagar este relatório?', repGenerating: 'A criar o relatório…'
+    },
+    tr: {
+      repDateSig: 'Tarih',
+      tabReport: 'Rapor', repTitle: 'Tarama raporu',
+      repIntro: 'Bir konaklama yerini oda oda kontrol edin ve yazdırılabilir veya paylaşılabilir, fotoğraflı ve tarihli bir rapor alın (kiralık ev, otel, ofis…).',
+      repProperty: 'Konaklama yerinin adı', repPropertyPh: 'ör. Leylak Apartmanı', repAddress: 'Adres (isteğe bağlı)', repBy: 'Kontrol eden (isteğe bağlı)',
+      repStart: '▶ Raporu başlat', repRooms: 'Kontrol edilecek odalar', repAddRoom: '+ Ekle', repRoomPh: 'Başka oda…',
+      repSuggest: ['Giriş', 'Salon', 'Mutfak', 'Yatak odası', 'Banyo', 'Tuvalet', 'Çalışma odası'],
+      repScanRoom: '📷 Tara', repRescan: '🔁 Yeniden', repFinish: '✅ Bitir ve raporu oluştur', repCancel: 'Bu raporu iptal et',
+      repConfirmCancel: 'Devam eden rapor iptal edilsin mi? Fotoğraflar Fotoğraflar sekmesinde kalır.',
+      repNeedRoom: 'Bitirmeden önce en az bir odayı tarayın.', repNeedName: 'Konaklama yerinin adını girin.',
+      repDone: 'Tamamlanan raporlar', repNone: 'Henüz tamamlanan rapor yok.',
+      repView: '👁 Görüntüle', repShare: '📤 Paylaş', repPrint: '🖨 Yazdır / PDF',
+      roomScanning: 'Şu anki oda: {room}', roomFinish: '✔ Oda tamam', roomResultTitle: 'Sonuç: {room}',
+      roomStats: 'Süre {d} • {a} uyarı • {p} fotoğraf',
+      stClear: 'Şüpheli bir şey bulunmadı', stFalse: 'Uyarı gözle kontrol edildi: yanlış alarm', stSuspect: 'Kontrol edilmesi gereken şüpheli öğe', stPending: 'Henüz taranmadı',
+      repNote: 'Not (isteğe bağlı)', repSave: 'Kaydet',
+      repDocTitle: 'Kontrol raporu — gizli kameralar ve mikrofonlar', repStarted: 'Başlangıç', repFinished: 'Bitiş', repId: 'Rapor no.', repSettings: 'Ayarlar',
+      repSummaryClear: '✅ Kontrol edilen {n} odada şüpheli öğe bildirilmedi.',
+      repSummarySuspect: '⚠️ {n} odadan {s} tanesinde kontrol edilmesi gereken şüpheli öğe var.',
+      repDisclaimer: 'Kontrol, lens yansımalarını ve kızılötesi LED’leri tespit eden genel kullanıma yönelik bir araçla (Kamera ve Mikrofon Dedektörü) yapılmıştır. Bu rapor gözlemlenenleri açıklar; gizli bir cihaz bulunmadığını garanti etmez.',
+      repShortScan: 'kısa tarama (20 sn’den az)', repSignature: 'İmza', repDeleteConfirm: 'Bu rapor silinsin mi?', repGenerating: 'Rapor oluşturuluyor…'
+    },
+    ar: {
+      repDateSig: 'التاريخ',
+      tabReport: 'التقرير', repTitle: 'تقرير الفحص',
+      repIntro: 'افحص المسكن غرفةً غرفة واحصل على تقرير مؤرَّخ مع صور للطباعة أو المشاركة (إيجار، فندق، مكتب…).',
+      repProperty: 'اسم المسكن', repPropertyPh: 'مثال: شقة الليلك', repAddress: 'العنوان (اختياري)', repBy: 'تم الفحص بواسطة (اختياري)',
+      repStart: '▶ بدء التقرير', repRooms: 'الغرف المطلوب فحصها', repAddRoom: '+ إضافة', repRoomPh: 'غرفة أخرى…',
+      repSuggest: ['المدخل', 'غرفة الجلوس', 'المطبخ', 'غرفة النوم', 'الحمّام', 'المرحاض', 'المكتب'],
+      repScanRoom: '📷 فحص', repRescan: '🔁 إعادة', repFinish: '✅ إنهاء وإنشاء التقرير', repCancel: 'إلغاء هذا التقرير',
+      repConfirmCancel: 'إلغاء التقرير الحالي؟ تبقى الصور في تبويب الصور.',
+      repNeedRoom: 'افحص غرفة واحدة على الأقل قبل الإنهاء.', repNeedName: 'أدخل اسم المسكن.',
+      repDone: 'التقارير المكتملة', repNone: 'لا توجد تقارير مكتملة بعد.',
+      repView: '👁 عرض', repShare: '📤 مشاركة', repPrint: '🖨 طباعة / PDF',
+      roomScanning: 'الغرفة الحالية: {room}', roomFinish: '✔ انتهت الغرفة', roomResultTitle: 'النتيجة: {room}',
+      roomStats: 'المدة {d} • {a} تنبيه • {p} صورة',
+      stClear: 'لم يُكتشف أي شيء مريب', stFalse: 'تم التحقق من التنبيه بالعين: إنذار خاطئ', stSuspect: 'عنصر مريب يجب التحقق منه', stPending: 'لم تُفحص بعد',
+      repNote: 'ملاحظة (اختياري)', repSave: 'حفظ',
+      repDocTitle: 'تقرير فحص — الكاميرات والميكروفونات المخفية', repStarted: 'البداية', repFinished: 'النهاية', repId: 'رقم التقرير', repSettings: 'الإعدادات',
+      repSummaryClear: '✅ لم يُبلَّغ عن أي عنصر مريب في الغرف المفحوصة ({n}).',
+      repSummarySuspect: '⚠️ {s} من أصل {n} غرف فيها عنصر مريب يجب التحقق منه.',
+      repDisclaimer: 'تم الفحص بأداة موجهة لعامة الناس (كاشف الكاميرات والميكروفونات) ترصد انعكاسات العدسات ومصابيح الأشعة تحت الحمراء. يصف هذا التقرير ما تمت ملاحظته، ولا يضمن عدم وجود أي جهاز مخفي.',
+      repShortScan: 'فحص قصير (أقل من 20 ثانية)', repSignature: 'التوقيع', repDeleteConfirm: 'حذف هذا التقرير؟', repGenerating: 'جارٍ إنشاء التقرير…'
+    }
+  };
+  const I = root.I18N || (typeof module !== 'undefined' && module.exports && module.exports.I18N);
+  if (I) for (const k in R) Object.assign(I._T[k], R[k]);
+  if (typeof module !== 'undefined' && module.exports) module.exports.REPORT_T = R;
+})(this);
+</script>
+<script>
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  window.App = window.App || { context: null };
   const t = (k, v) => I18N.t(k, v);
   const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
   const statusEl = $('status');
@@ -829,11 +1107,18 @@ ol li { margin-bottom:10px; line-height:1.4; }
   }
 
   // ---------- Onglets ----------
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
-    if (b.dataset.tab === 'photos') renderGallery();
-  }));
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === name));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === name));
+    if (name === 'photos') renderGallery();
+    emit('tab', name);
+  }
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  // ---------- Petite API pour les modules (rapport de scan) ----------
+  const listeners = {};
+  function on(evt, fn) { (listeners[evt] = listeners[evt] || []).push(fn); }
+  function emit(evt, data) { (listeners[evt] || []).forEach(fn => { try { fn(data); } catch (e) { console.error(e); } }); }
 
   $('sens').addEventListener('input', e => { $('sensVal').textContent = e.target.value; });
   $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: MIN_HITS }); });
@@ -971,6 +1256,7 @@ ol li { margin-bottom:10px; line-height:1.4; }
     const mode = $('mode').value;
     const res = Detector.analyze(img, { mode, sensitivity: +$('sens').value });
     const confirmed = tracker.update(res.blobs);
+    emit('frame', { confirmed, crowded: confirmed.length >= 4 });
 
     drawOverlay(res.blobs, confirmed, pw, ph);
 
@@ -1054,8 +1340,9 @@ ol li { margin-bottom:10px; line-height:1.4; }
     $('flash').style.opacity = 0.8; setTimeout(() => ($('flash').style.opacity = 0), 120);
     c.toBlob(blob => {
       if (!blob) { setStatus('saveFail', 'alert', null, 3000); return; }
-      savePhoto({ blob, date: date.toISOString(), info, auto: !!auto })
-        .then(updateCount)
+      const ctxInfo = window.App.context ? { reportId: App.context.reportId, roomId: App.context.roomId } : {};
+      savePhoto(Object.assign({ blob, date: date.toISOString(), info, auto: !!auto }, ctxInfo))
+        .then(id => { updateCount(); emit('photo', { id, auto: !!auto }); })
         .catch(() => setStatus('saveFail', 'alert', null, 3000));
     }, 'image/jpeg', 0.9);
   }
@@ -1071,18 +1358,23 @@ ol li { margin-bottom:10px; line-height:1.4; }
     if (!dbp) {
       dbp = new Promise((res, rej) => {
         if (!window.indexedDB) return rej(new Error('no indexedDB'));
-        const r = indexedDB.open('detecteur', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+        const r = indexedDB.open('detecteur', 2);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+          if (!d.objectStoreNames.contains('reports')) d.createObjectStore('reports', { keyPath: 'id', autoIncrement: true });
+        };
         r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
       });
       dbp.catch(() => { dbp = null; });
     }
     return dbp;
   }
-  function run(mode, fn) {
+  function run(mode, fn, storeName) {
+    storeName = storeName || 'photos';
     return db().then(d => new Promise((res, rej) => {
-      const tx = d.transaction('photos', mode);
-      const r = fn(tx.objectStore('photos'));
+      const tx = d.transaction(storeName, mode);
+      const r = fn(tx.objectStore(storeName));
       tx.oncomplete = () => res(r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
     }));
   }
@@ -1193,9 +1485,372 @@ ol li { margin-bottom:10px; line-height:1.4; }
   $('switchBtn').onclick = switchCamera;
   $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(x => x.hits >= MIN_HITS && x.miss === 0), work.width, false);
 
+  const App = window.App;
+  Object.assign(App, {
+    t, on, showTab, start, stop, setStatus, iconBtn, openViewer, infoText,
+    isRunning: () => running,
+    settings: () => ({ mode: $('mode').value, sensitivity: +$('sens').value }),
+    store: (name, mode, fn) => run(mode, fn, name),
+    getPhoto: id => run('readonly', s => s.get(id))
+  });
   refreshTexts();
   updateCount();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+<script>
+// Mode « Rapport de scan » : vérification pièce par pièce + rapport daté avec photos.
+(function () {
+  'use strict';
+  const App = window.App;
+  const $ = id => document.getElementById(id);
+  const t = (k, v) => I18N.t(k, v);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const SHORT_SCAN_MS = 20000;
+
+  // ---------- Stockage ----------
+  const reports = {
+    all: () => App.store('reports', 'readonly', s => s.getAll()),
+    get: id => App.store('reports', 'readonly', s => s.get(id)),
+    put: r => App.store('reports', 'readwrite', s => s.put(r)),
+    del: id => App.store('reports', 'readwrite', s => s.delete(id))
+  };
+  let draft = null;          // rapport en cours
+  let session = null;        // pièce en cours de scan
+
+  async function loadDraft() {
+    try { draft = (await reports.all()).find(r => r.status === 'draft') || null; } catch (e) { draft = null; }
+  }
+  async function saveDraft() { if (draft) draft.id = await reports.put(draft); }
+
+  // ---------- Écran « Rapport » ----------
+  async function render() {
+    $('reportNew').hidden = !!draft;
+    $('reportCurrent').hidden = !draft;
+    renderSuggestions();
+    if (draft) renderDraft();
+    renderList();
+  }
+
+  function renderSuggestions() {
+    const box = $('roomSuggest'); box.innerHTML = '';
+    const names = draft ? draft.rooms.map(r => r.name.toLowerCase()) : [];
+    (t('repSuggest') || []).forEach(name => {
+      if (names.includes(name.toLowerCase())) return;
+      const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = '+ ' + name;
+      b.onclick = () => addRoom(name);
+      box.appendChild(b);
+    });
+  }
+
+  function statusBadge(st) {
+    const map = { clear: ['ok', 'stClear'], false: ['warn', 'stFalse'], suspect: ['bad', 'stSuspect'], pending: ['idle', 'stPending'] };
+    const [cls, key] = map[st] || map.pending;
+    const s = document.createElement('span'); s.className = 'badge ' + cls; s.textContent = t(key);
+    return s;
+  }
+
+  function renderDraft() {
+    $('repHead').textContent = draft.property + (draft.address ? ' — ' + draft.address : '');
+    const ul = $('roomList'); ul.innerHTML = '';
+    draft.rooms.forEach(room => {
+      const li = document.createElement('li'); li.className = 'room';
+      const top = document.createElement('div'); top.className = 'room-top';
+      const name = document.createElement('b'); name.textContent = room.name;
+      top.append(name, statusBadge(room.status));
+      li.appendChild(top);
+      if (room.status !== 'pending') {
+        const st = document.createElement('div'); st.className = 'small';
+        st.textContent = t('roomStats', { d: fmtDur(room.durationMs), a: room.alerts, p: room.photoIds.length })
+          + (room.durationMs < SHORT_SCAN_MS ? ' • ⚠️ ' + t('repShortScan') : '') + (room.note ? ' • ' + room.note : '');
+        li.appendChild(st);
+      }
+      const acts = document.createElement('div'); acts.className = 'room-acts';
+      const bScan = document.createElement('button'); bScan.textContent = t(room.status === 'pending' ? 'repScanRoom' : 'repRescan');
+      bScan.className = room.status === 'pending' ? 'primary' : '';
+      bScan.onclick = () => startRoom(room.id);
+      const bDel = App.iconBtn('🗑', t('delete'));
+      bDel.onclick = async () => { draft.rooms = draft.rooms.filter(r => r.id !== room.id); await saveDraft(); render(); };
+      acts.append(bScan, bDel);
+      li.appendChild(acts);
+      ul.appendChild(li);
+    });
+  }
+
+  async function renderList() {
+    const box = $('reportList'); box.innerHTML = '';
+    let list = [];
+    try { list = (await reports.all()).filter(r => r.status === 'final').reverse(); } catch (e) { /* stockage indisponible */ }
+    if (!list.length) { const p = document.createElement('p'); p.className = 'small'; p.textContent = t('repNone'); box.appendChild(p); return; }
+    list.forEach(r => {
+      const card = document.createElement('div'); card.className = 'card rep-card';
+      const h = document.createElement('b'); h.textContent = r.property;
+      const meta = document.createElement('div'); meta.className = 'small';
+      const susp = r.rooms.filter(x => x.status === 'suspect').length;
+      meta.textContent = new Date(r.finishedAt).toLocaleString(I18N.lang) + ' • ' + t('repId') + ' ' + r.hash;
+      const sum = document.createElement('div'); sum.className = 'small';
+      sum.textContent = susp ? t('repSummarySuspect', { s: susp, n: r.rooms.length }) : t('repSummaryClear', { n: r.rooms.length });
+      const acts = document.createElement('div'); acts.className = 'room-acts';
+      const bView = document.createElement('button'); bView.textContent = t('repView'); bView.onclick = () => openReport(r);
+      const bShare = document.createElement('button'); bShare.textContent = t('repShare'); bShare.onclick = () => shareReport(r);
+      const bDel = App.iconBtn('🗑', t('delete'));
+      bDel.onclick = async () => { if (confirm(t('repDeleteConfirm'))) { await reports.del(r.id); renderList(); } };
+      acts.append(bView, bShare, bDel);
+      card.append(h, meta, sum, acts);
+      box.appendChild(card);
+    });
+  }
+
+  // ---------- Création / pièces ----------
+  async function createDraft() {
+    const property = $('repProperty').value.trim();
+    if (!property) { alert(t('repNeedName')); $('repProperty').focus(); return; }
+    draft = {
+      status: 'draft', property, address: $('repAddress').value.trim(), by: $('repBy').value.trim(),
+      createdAt: new Date().toISOString(), rooms: [], nextRoom: 1
+    };
+    await saveDraft();
+    $('repProperty').value = $('repAddress').value = $('repBy').value = '';
+    render();
+  }
+
+  async function addRoom(name) {
+    name = String(name || '').trim();
+    if (!name || !draft) return;
+    draft.rooms.push({ id: draft.nextRoom++, name, status: 'pending', note: '', durationMs: 0, frames: 0, alerts: 0, photoIds: [], scannedAt: null });
+    await saveDraft();
+    render();
+  }
+
+  async function cancelDraft() {
+    if (!draft || !confirm(t('repConfirmCancel'))) return;
+    endSession(false);
+    await reports.del(draft.id);
+    draft = null;
+    render();
+  }
+
+  // ---------- Scan d'une pièce ----------
+  function startRoom(roomId) {
+    const room = draft && draft.rooms.find(r => r.id === roomId);
+    if (!room) return;
+    session = { roomId, start: Date.now(), frames: 0, alertIds: new Set(), photoIds: [] };
+    App.context = { reportId: draft.id, roomId };
+    $('roomBarName').textContent = t('roomScanning', { room: room.name });
+    $('roomBar').hidden = false;
+    App.showTab('scan');
+    if (!App.isRunning()) App.start();
+  }
+
+  App.on('frame', ({ confirmed, crowded }) => {
+    if (!session || !App.isRunning()) return;
+    session.frames++;
+    if (!crowded) confirmed.forEach(c => session.alertIds.add(c.id));
+  });
+  App.on('photo', ({ id }) => { if (session) session.photoIds.push(id); });
+
+  function finishRoom() {
+    if (!session) return;
+    if (App.isRunning()) App.stop();
+    const room = draft.rooms.find(r => r.id === session.roomId);
+    const dur = Date.now() - session.start, alerts = session.alertIds.size;
+    $('resTitle').textContent = t('roomResultTitle', { room: room.name });
+    $('resStats').textContent = t('roomStats', { d: fmtDur(dur), a: alerts, p: session.photoIds.length }) + (dur < SHORT_SCAN_MS ? ' • ⚠️ ' + t('repShortScan') : '');
+    document.querySelectorAll('input[name=roomRes]').forEach(i => { i.checked = i.value === (alerts ? 'false' : 'clear'); });
+    $('resNote').value = room.note || '';
+    session.durationMs = dur; session.alerts = alerts;
+    $('roomResult').hidden = false;
+  }
+
+  async function saveRoomResult() {
+    const room = draft.rooms.find(r => r.id === session.roomId);
+    const choice = document.querySelector('input[name=roomRes]:checked');
+    Object.assign(room, {
+      status: choice ? choice.value : 'clear', note: $('resNote').value.trim(),
+      durationMs: session.durationMs, frames: session.frames, alerts: session.alerts,
+      photoIds: session.photoIds.slice(), scannedAt: new Date().toISOString()
+    });
+    $('roomResult').hidden = true;
+    endSession(true);
+    await saveDraft();
+    App.showTab('report');
+  }
+
+  function endSession(keep) {
+    session = null;
+    App.context = null;
+    $('roomBar').hidden = true;
+    if (!keep) $('roomResult').hidden = true;
+  }
+
+  // ---------- Rapport final ----------
+  async function finishDraft() {
+    if (!draft) return;
+    const scanned = draft.rooms.filter(r => r.status !== 'pending');
+    if (!scanned.length) { alert(t('repNeedRoom')); return; }
+    const btn = $('repFinishBtn'); btn.disabled = true; btn.textContent = t('repGenerating');
+    try {
+      const photos = {};
+      for (const room of scanned) {
+        for (const pid of room.photoIds) {
+          try { const p = await App.getPhoto(pid); if (p && p.blob) photos[pid] = await shrink(p.blob, 1000); } catch (e) { /* photo supprimée */ }
+        }
+      }
+      const final = {
+        status: 'final', property: draft.property, address: draft.address, by: draft.by,
+        createdAt: draft.createdAt, finishedAt: new Date().toISOString(), lang: I18N.lang,
+        settings: App.settings(), rooms: scanned.map(r => Object.assign({}, r, { photoIds: r.photoIds.filter(id => photos[id]) })),
+        photos
+      };
+      final.hash = await fingerprint(final);
+      final.id = draft.id;
+      await reports.put(final);
+      draft = null;
+      await render();
+      openReport(final);
+    } finally {
+      btn.disabled = false; btn.textContent = t('repFinish');
+    }
+  }
+
+  // Réduit une photo pour que le rapport reste léger (et partageable).
+  function shrink(blob, max) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = e => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+
+  // N° du rapport : empreinte du contenu (change si le contenu change).
+  async function fingerprint(rep) {
+    const txt = JSON.stringify([rep.property, rep.address, rep.by, rep.createdAt, rep.finishedAt, rep.rooms, Object.keys(rep.photos).map(k => rep.photos[k].length)]);
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+      return Array.from(new Uint8Array(buf).slice(0, 5)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    } catch (e) {
+      let h = 2166136261; for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return (h >>> 0).toString(16).toUpperCase().padStart(8, '0');
+    }
+  }
+
+  function fmtDur(ms) {
+    const s = Math.round((ms || 0) / 1000), m = Math.floor(s / 60);
+    return m ? m + ' min ' + String(s % 60).padStart(2, '0') + ' s' : s + ' s';
+  }
+
+  // Le document du rapport (le même pour l'affichage, l'impression et le fichier partagé).
+  const REP_CSS = `
+.rep{background:#fff;color:#111;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.4;max-width:800px;margin:0 auto;padding:24px}
+.rep h1{font-size:1.35rem;margin:0 0 4px}.rep h2{font-size:1.1rem;margin:0}
+.rep .muted{color:#555;font-size:.9rem}.rep table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.92rem}
+.rep td{border:1px solid #ccc;padding:6px 8px;vertical-align:top}.rep td:first-child{width:35%;color:#444}
+.rep .sum{padding:10px 12px;border-radius:8px;margin:12px 0;font-weight:600}.rep .sum.ok{background:#e8f6ec}.rep .sum.bad{background:#fdeaea}
+.rep .rroom{background:#fff;color:#111;border:1px solid #ccc;border-radius:8px;padding:10px 12px;margin:10px 0;break-inside:avoid}
+.rep .st{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.85rem;font-weight:600;margin-top:4px}
+.rep .st.clear{background:#e8f6ec;color:#14532d}.rep .st.false{background:#fff4d6;color:#713f12}.rep .st.suspect{background:#fdeaea;color:#7f1d1d}
+.rep .ph{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:8px}.rep .ph img{width:100%;border-radius:4px}
+.rep .disc{font-size:.82rem;color:#444;border-top:1px solid #ccc;margin-top:16px;padding-top:10px}
+.rep .sig{margin-top:28px;display:flex;gap:24px}.rep .sig div{flex:1;border-top:1px solid #888;padding-top:4px;font-size:.85rem;color:#444}
+.rep[dir=rtl] td:first-child{text-align:right}`;
+
+  function reportBody(r) {
+    const L = (k, v) => I18N.tIn(r.lang, k, v);
+    const loc = r.lang;
+    const dir = I18N._T[r.lang] && I18N._T[r.lang]._rtl ? 'rtl' : 'ltr';
+    const susp = r.rooms.filter(x => x.status === 'suspect').length;
+    const modeName = L(r.settings && r.settings.mode === 'ir' ? 'modeNameIR' : 'modeNameReflect');
+    const stKey = { clear: 'stClear', false: 'stFalse', suspect: 'stSuspect' };
+    let h = `<div class="rep" dir="${dir}" lang="${esc(loc)}">`;
+    h += `<h1>${esc(L('repDocTitle'))}</h1><h2><bdi>${esc(r.property)}</bdi></h2>`;
+    if (r.address) h += `<div class="muted"><bdi>${esc(r.address)}</bdi></div>`;
+    h += `<table>
+      <tr><td>${esc(L('repId'))}</td><td><b>${esc(r.hash)}</b></td></tr>
+      <tr><td>${esc(L('repStarted'))}</td><td>${esc(new Date(r.createdAt).toLocaleString(loc))}</td></tr>
+      <tr><td>${esc(L('repFinished'))}</td><td>${esc(new Date(r.finishedAt).toLocaleString(loc))}</td></tr>
+      ${r.by ? `<tr><td>${esc(L('repBy').replace(/\s*\(.*\)\s*$/, ''))}</td><td><bdi>${esc(r.by)}</bdi></td></tr>` : ''}
+      <tr><td>${esc(L('repSettings'))}</td><td>${esc(modeName)} • ${esc(L('sensitivity'))} ${esc(r.settings ? r.settings.sensitivity : '')}</td></tr>
+    </table>`;
+    h += susp ? `<div class="sum bad">${esc(L('repSummarySuspect', { s: susp, n: r.rooms.length }))}</div>`
+              : `<div class="sum ok">${esc(L('repSummaryClear', { n: r.rooms.length }))}</div>`;
+    r.rooms.forEach(room => {
+      h += `<div class="rroom"><b><bdi>${esc(room.name)}</bdi></b><br><span class="st ${esc(room.status)}">${esc(L(stKey[room.status] || 'stClear'))}</span>`;
+      h += `<div class="muted">${esc(new Date(room.scannedAt).toLocaleTimeString(loc))} • ${esc(L('roomStats', { d: fmtDur(room.durationMs), a: room.alerts, p: room.photoIds.length }))}${room.durationMs < SHORT_SCAN_MS ? ' • ⚠️ ' + esc(L('repShortScan')) : ''}</div>`;
+      if (room.note) h += `<div><bdi>${esc(room.note)}</bdi></div>`;
+      if (room.photoIds.length) h += '<div class="ph">' + room.photoIds.map(id => `<img src="${r.photos[id]}" alt="">`).join('') + '</div>';
+      h += '</div>';
+    });
+    h += `<div class="disc">${esc(L('repDisclaimer'))}</div>`;
+    h += `<div class="sig"><div>${esc(L('repSignature'))}</div><div>${esc(L('repDateSig'))}</div></div></div>`;
+    return h;
+  }
+
+  function reportFile(r) {
+    const title = I18N.tIn(r.lang, 'repDocTitle') + ' — ' + r.property;
+    return `<!doctype html><html lang="${esc(r.lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>body{margin:0;background:#fff}${REP_CSS}</style></head><body>${reportBody(r)}</body></html>`;
+  }
+  function fileName(r) {
+    const slug = String(r.property).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'rapport';
+    return 'rapport-' + slug + '-' + r.finishedAt.slice(0, 10) + '.html';
+  }
+
+  let viewing = null;
+  function openReport(r) {
+    viewing = r;
+    $('reportDoc').innerHTML = '<style>' + REP_CSS + '</style>' + reportBody(r);
+    $('reportOverlay').hidden = false;
+    $('reportOverlay').scrollTop = 0;
+  }
+  function closeReport() { $('reportOverlay').hidden = true; $('reportDoc').innerHTML = ''; viewing = null; }
+
+  async function shareReport(r) {
+    const html = reportFile(r);
+    const name = fileName(r);
+    const file = typeof File === 'function' ? new File([html], name, { type: 'text/html' }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: r.property }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  function printReport() {
+    document.body.classList.add('print-report');
+    const done = () => { document.body.classList.remove('print-report'); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print();
+    setTimeout(done, 60000);
+  }
+
+  // ---------- Événements ----------
+  $('repStartBtn').onclick = createDraft;
+  $('repCancelBtn').onclick = cancelDraft;
+  $('repFinishBtn').onclick = finishDraft;
+  $('roomAddBtn').onclick = () => { addRoom($('roomName').value); $('roomName').value = ''; };
+  $('roomName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('roomAddBtn').click(); } });
+  $('roomDoneBtn').onclick = finishRoom;
+  $('resSave').onclick = saveRoomResult;
+  $('repViewClose').onclick = closeReport;
+  $('repViewPrint').onclick = printReport;
+  $('repViewShare').onclick = () => viewing && shareReport(viewing);
+  App.on('tab', name => { if (name === 'report') render(); });
+  document.addEventListener('langchange', () => {
+    if (session) { const room = draft.rooms.find(r => r.id === session.roomId); $('roomBarName').textContent = t('roomScanning', { room: room.name }); }
+    if ($('report').classList.contains('active')) render();
+  });
+
+  loadDraft().then(render);
+  window.Report = { _reportBody: reportBody, _fmtDur: fmtDur };
 })();
 </script>
 </body>

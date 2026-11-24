@@ -410,8 +410,10 @@
     for (const p of prefs) { const c = String(p).slice(0, 2).toLowerCase(); if (T[c]) return c; }
     return 'en';
   }
-  function t(key, vars) {
-    let s = (T[lang] && T[lang][key] != null) ? T[lang][key] : (T.en[key] != null ? T.en[key] : key);
+  function t(key, vars) { return tIn(lang, key, vars); }
+  // Traduction dans une langue précise (ex. le rapport garde la langue choisie à sa création).
+  function tIn(code, key, vars) {
+    let s = (T[code] && T[code][key] != null) ? T[code][key] : (T.en[key] != null ? T.en[key] : key);
     if (vars && typeof s === 'string') s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
     return s;
   }
@@ -420,6 +422,7 @@
     document.documentElement.dir = T[lang]._rtl ? 'rtl' : 'ltr';
     document.title = t('title');
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
     const ol = document.getElementById('guideList');
     if (ol) {
       ol.innerHTML = '';
@@ -436,5 +439,5 @@
     document.dispatchEvent(new CustomEvent('langchange'));
   }
   lang = detect();
-  root.I18N = { t, set, apply, get lang() { return lang; }, languages: Object.keys(T).map(k => ({ code: k, name: T[k]._name })), _T: T };
+  root.I18N = { t, tIn, set, apply, get lang() { return lang; }, languages: Object.keys(T).map(k => ({ code: k, name: T[k]._name })), _T: T };
 })(this);

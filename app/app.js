@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   const $ = id => document.getElementById(id);
+  window.App = window.App || { context: null };
   const t = (k, v) => I18N.t(k, v);
   const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
   const statusEl = $('status');
@@ -45,11 +46,18 @@
   }
 
   // ---------- Onglets ----------
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
-    if (b.dataset.tab === 'photos') renderGallery();
-  }));
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === name));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === name));
+    if (name === 'photos') renderGallery();
+    emit('tab', name);
+  }
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  // ---------- Petite API pour les modules (rapport de scan) ----------
+  const listeners = {};
+  function on(evt, fn) { (listeners[evt] = listeners[evt] || []).push(fn); }
+  function emit(evt, data) { (listeners[evt] || []).forEach(fn => { try { fn(data); } catch (e) { console.error(e); } }); }
 
   $('sens').addEventListener('input', e => { $('sensVal').textContent = e.target.value; });
   $('mode').addEventListener('change', () => { tracker = new Detector.Tracker({ minHits: MIN_HITS }); });
@@ -187,6 +195,7 @@
     const mode = $('mode').value;
     const res = Detector.analyze(img, { mode, sensitivity: +$('sens').value });
     const confirmed = tracker.update(res.blobs);
+    emit('frame', { confirmed, crowded: confirmed.length >= 4 });
 
     drawOverlay(res.blobs, confirmed, pw, ph);
 
@@ -270,8 +279,9 @@
     $('flash').style.opacity = 0.8; setTimeout(() => ($('flash').style.opacity = 0), 120);
     c.toBlob(blob => {
       if (!blob) { setStatus('saveFail', 'alert', null, 3000); return; }
-      savePhoto({ blob, date: date.toISOString(), info, auto: !!auto })
-        .then(updateCount)
+      const ctxInfo = window.App.context ? { reportId: App.context.reportId, roomId: App.context.roomId } : {};
+      savePhoto(Object.assign({ blob, date: date.toISOString(), info, auto: !!auto }, ctxInfo))
+        .then(id => { updateCount(); emit('photo', { id, auto: !!auto }); })
         .catch(() => setStatus('saveFail', 'alert', null, 3000));
     }, 'image/jpeg', 0.9);
   }
@@ -287,18 +297,23 @@
     if (!dbp) {
       dbp = new Promise((res, rej) => {
         if (!window.indexedDB) return rej(new Error('no indexedDB'));
-        const r = indexedDB.open('detecteur', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+        const r = indexedDB.open('detecteur', 2);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+          if (!d.objectStoreNames.contains('reports')) d.createObjectStore('reports', { keyPath: 'id', autoIncrement: true });
+        };
         r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
       });
       dbp.catch(() => { dbp = null; });
     }
     return dbp;
   }
-  function run(mode, fn) {
+  function run(mode, fn, storeName) {
+    storeName = storeName || 'photos';
     return db().then(d => new Promise((res, rej) => {
-      const tx = d.transaction('photos', mode);
-      const r = fn(tx.objectStore('photos'));
+      const tx = d.transaction(storeName, mode);
+      const r = fn(tx.objectStore(storeName));
       tx.oncomplete = () => res(r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
     }));
   }
@@ -409,6 +424,14 @@
   $('switchBtn').onclick = switchCamera;
   $('snapBtn').onclick = () => takePhoto(tracker.tracks.filter(x => x.hits >= MIN_HITS && x.miss === 0), work.width, false);
 
+  const App = window.App;
+  Object.assign(App, {
+    t, on, showTab, start, stop, setStatus, iconBtn, openViewer, infoText,
+    isRunning: () => running,
+    settings: () => ({ mode: $('mode').value, sensitivity: +$('sens').value }),
+    store: (name, mode, fn) => run(mode, fn, name),
+    getPhoto: id => run('readonly', s => s.get(id))
+  });
   refreshTexts();
   updateCount();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

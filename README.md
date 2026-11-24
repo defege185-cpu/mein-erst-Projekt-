@@ -16,6 +16,8 @@ Les photos restent stockées sur le téléphone.
 - Bouton 🔄 pour passer à la caméra avant (souvent meilleure pour l'infrarouge).
 - **Détecteur magnétique** (si le téléphone le permet) pour les micros et circuits électroniques.
 - Galerie des photos avec enregistrement et suppression.
+- **Rapport de scan** : vérification d'un logement pièce par pièce (location, hôtel, bureau…),
+  résultat par pièce, puis rapport daté avec photos à imprimer en PDF ou à partager (8 langues).
 
 ## Langues
 Français, English, Deutsch, Español, Italiano, Português, Türkçe, العربية.

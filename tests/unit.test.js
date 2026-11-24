@@ -95,3 +95,17 @@ test('toutes les langues ont toutes les traductions', () => {
     }
   }
 });
+
+test('le rapport de scan est traduit dans toutes les langues', () => {
+  const R = require('../app/i18n-report.js').REPORT_T;
+  const ref = Object.keys(R.fr);
+  assert.deepStrictEqual(Object.keys(R).sort(), ['ar', 'de', 'en', 'es', 'fr', 'it', 'pt', 'tr']);
+  for (const [code, dict] of Object.entries(R)) {
+    for (const k of ref) assert.ok(dict[k] != null && dict[k] !== '', code + ' : clé manquante ' + k);
+    assert.strictEqual(dict.repSuggest.length, R.fr.repSuggest.length, code + ' : pièces suggérées');
+    for (const k of ['roomStats', 'repSummarySuspect', 'repSummaryClear', 'roomScanning', 'roomResultTitle']) {
+      const want = (R.fr[k].match(/\{\w+\}/g) || []).sort().join();
+      assert.strictEqual((dict[k].match(/\{\w+\}/g) || []).sort().join(), want, code + ' : variables de ' + k);
+    }
+  }
+});
