@@ -1,0 +1,4 @@
+# Fichiers Windows : fins de ligne CRLF conservees telles quelles
+optimiseur-windows/*.bat -text
+optimiseur-windows/*.ps1 -text
+optimiseur-windows/tests/*.ps1 -text
