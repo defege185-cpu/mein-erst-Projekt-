@@ -1,5 +1,10 @@
 # Optimiseur PC — Windows 10 et 11
 
+[![Démonstration de l'Optimiseur PC](demo/apercu.gif)](demo/demo-optimiseur-pc.mp4)
+
+▶ **Vidéo de démonstration (1 min, en français)** : [demo/demo-optimiseur-pc.mp4](demo/demo-optimiseur-pc.mp4)
+— aussi disponible sur la [page de téléchargement](https://github.com/defege185-cpu/mein-erst-Projekt-/releases/latest).
+
 Application gratuite, simple et sans installation pour rendre Windows plus fluide **en jeu** et en
 **télétravail**, **sans surchauffe**. Fonctionne avec toutes les cartes graphiques (NVIDIA GeForce RTX/GTX,
 AMD Radeon, Intel Arc/Iris) et tous les processeurs Intel et AMD, car elle ne touche à aucun pilote ni

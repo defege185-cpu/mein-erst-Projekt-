@@ -53,3 +53,11 @@ jobs:
             "dist/OptimiseurPC-${{ steps.v.outputs.version }}.zip" \
             --title "Optimiseur PC ${{ steps.v.outputs.version }}" \
             --notes-file notes.md --target "${{ github.sha }}" --latest
+      - name: Vidéo de démonstration
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f=optimiseur-windows/demo/demo-optimiseur-pc.mp4
+          if [ -f "$f" ]; then
+            gh release upload "optimiseur-v${{ steps.v.outputs.version }}" "$f" --clobber
+          fi
