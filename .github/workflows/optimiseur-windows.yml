@@ -22,6 +22,27 @@ jobs:
       - name: Tests (Windows PowerShell 5.1)
         shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -STA -File optimiseur-windows\tests\Test-Optimiseur.ps1
+      - name: Captures d'écran de chaque onglet (fr, en, de)
+        shell: powershell
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'captures'
+          foreach ($l in 'fr', 'en', 'de') {
+            $data = Join-Path $env:RUNNER_TEMP "donnees-$l"
+            $args = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$PWD\optimiseur-windows\OptimiseurPC.ps1`" -Lang $l -DataPath `"$data`" -CaptureDir `"$out`""
+            $p = Start-Process powershell.exe -ArgumentList $args -PassThru
+            if (-not $p.WaitForExit(90000)) { $p.Kill(); Write-Host "::error::La fenêtre ($l) ne s'est pas fermée" ; exit 1 }
+            Get-Content (Join-Path $data 'journal.log') -ErrorAction SilentlyContinue
+          }
+          $png = @(Get-ChildItem $out -Filter *.png -ErrorAction SilentlyContinue)
+          $png | Format-Table Name, Length
+          if ($png.Count -ne 15) { Write-Host "::error::$($png.Count) captures au lieu de 15"; exit 1 }
+      - name: Envoi des captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-${{ matrix.os }}
+          path: ${{ runner.temp }}/captures
+          if-no-files-found: warn
       - name: Analyse PSScriptAnalyzer (erreurs)
         shell: powershell
         run: |

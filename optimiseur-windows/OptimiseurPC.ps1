@@ -18,7 +18,8 @@
 param(
     [switch]$TestMode,
     [string]$DataPath,
-    [string]$Lang
+    [string]$Lang,
+    [string]$CaptureDir   # tests : enregistre une image de chaque onglet puis ferme
 )
 
 Set-StrictMode -Off
@@ -620,8 +621,9 @@ $AppCatalog = @(
     @{ P = 'king.com.*';                             N = 'Jeux King (Candy Crush...) - sponsorisé'; S = $true }
     @{ P = '*Disney*';                               N = 'Disney+ - sponsorisé'; S = $false }
     @{ P = '*TikTok*';                               N = 'TikTok - sponsorisé'; S = $true }
-    @{ P = '*Facebook*';                             N = 'Facebook - sponsorisé'; S = $true }
+    # Instagram avant Facebook : ses paquets s'appellent « Facebook.Instagram... »
     @{ P = '*Instagram*';                            N = 'Instagram - sponsorisé'; S = $true }
+    @{ P = '*Facebook*';                             N = 'Facebook - sponsorisé'; S = $true }
     @{ P = '*LinkedIn*';                             N = 'LinkedIn - sponsorisé'; S = $false }
     @{ P = '*Twitter*';                              N = 'X (Twitter) - sponsorisé'; S = $true }
     @{ P = '*Spotify*';                              N = 'Spotify'; S = $false; Note = 'Gardez-la si vous l''utilisez.' }
@@ -629,21 +631,32 @@ $AppCatalog = @(
     @{ P = '*Netflix*';                              N = 'Netflix'; S = $false }
 )
 
+# Première entrée du catalogue qui correspond au nom du paquet (l'ordre du catalogue compte)
+function Get-CatalogEntry([string]$PackageName) {
+    foreach ($e in $AppCatalog) { if ($PackageName -like $e.P) { return $e } }
+    return $null
+}
+
 function Get-BloatApps {
     $all = @(Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { -not $_.IsFramework -and -not $_.NonRemovable })
     $seen = @{}
     $res = New-Object System.Collections.Generic.List[object]
-    foreach ($e in $AppCatalog) {
-        foreach ($p in @($all | Where-Object { $_.Name -like $e.P })) {
-            if ($seen.ContainsKey($p.PackageFullName)) { continue }
-            $seen[$p.PackageFullName] = $true
-            $res.Add([pscustomobject]@{
-                Name = $e.N; Note = $e.Note; Suggest = [bool]$e.S
-                FullName = $p.PackageFullName; Family = $p.PackageFamilyName; PkgName = $p.Name
-            })
-        }
+    foreach ($p in $all) {
+        $e = Get-CatalogEntry $p.Name
+        if (-not $e -or $seen.ContainsKey($p.PackageFullName)) { continue }
+        $seen[$p.PackageFullName] = $true
+        $res.Add([pscustomobject]@{
+            Name = $e.N; Note = $e.Note; Suggest = [bool]$e.S
+            FullName = $p.PackageFullName; Family = $p.PackageFamilyName; PkgName = $p.Name
+        })
     }
     return $res.ToArray()
+}
+
+# Processeurs Intel Core de bureau 13e et 14e génération (i5/i7/i9-13xxx ou 14xxx, sans H, HX, U, P ou T),
+# concernés par les mises à jour de microcode publiées par Intel contre un problème d'instabilité.
+function Test-IntelRaptorDesktop([string]$CpuName) {
+    return [bool]($CpuName -match 'Intel.*Core.*\bi[579]-1[34]\d{3}(K|KF|KS|F)?\b')
 }
 
 Import-Data
@@ -723,6 +736,93 @@ $XamlText = @'
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Padding" Value="22,11"/>
       <Setter Property="Margin" Value="0"/>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Foreground" Value="#E6E9EF"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="#1B2130" BorderBrush="#2E3647" BorderThickness="1" CornerRadius="8">
+                      <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"
+                            Data="M0,0 L4,4 L8,0" Stroke="#97A1B3" StrokeThickness="1.5"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#252C3B"/></Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter IsHitTestVisible="False" Margin="10,5,28,5" VerticalAlignment="Center"
+                                Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                     AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                <Border Background="#1B2130" BorderBrush="#2E3647" BorderThickness="1" CornerRadius="8" Margin="0,4,0,0"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                  <ScrollViewer MaxHeight="260"><ItemsPresenter Margin="4"/></ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="#E6E9EF"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Bd" Padding="10,6" CornerRadius="6" Background="Transparent"><ContentPresenter/></Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="Bd" Property="Background" Value="#22345A"/></Trigger>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Bd" Property="Background" Value="#2F4470"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <ControlTemplate x:Key="ThumbTpl" TargetType="Thumb">
+      <Border x:Name="T" Background="#3A4356" CornerRadius="4" Margin="2"/>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#566078"/></Trigger>
+        <Trigger Property="IsDragging" Value="True"><Setter TargetName="T" Property="Background" Value="#6B7590"/></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="10"/>
+      <Setter Property="MinWidth" Value="10"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+              <Track.Thumb><Thumb Template="{StaticResource ThumbTpl}"/></Track.Thumb>
+            </Track>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="Orientation" Value="Horizontal">
+          <Setter Property="Width" Value="Auto"/>
+          <Setter Property="MinWidth" Value="0"/>
+          <Setter Property="Height" Value="10"/>
+          <Setter Property="MinHeight" Value="10"/>
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="ScrollBar">
+                <Track x:Name="PART_Track">
+                  <Track.Thumb><Thumb Template="{StaticResource ThumbTpl}"/></Track.Thumb>
+                </Track>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Trigger>
+      </Style.Triggers>
     </Style>
     <Style TargetType="CheckBox">
       <Setter Property="Foreground" Value="#E6E9EF"/>
@@ -833,7 +933,7 @@ $XamlText = @'
                   <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
                   <TextBlock Text="Température carte graphique"/>
                   <TextBlock x:Name="TxtGpuTemp" Grid.Column="1" TextWrapping="Wrap" FontWeight="SemiBold" Text="..."/>
-                  <TextBlock Grid.Row="1" Text="Température processeur" Margin="0,8,0,0"/>
+                  <TextBlock Grid.Row="1" Text="Capteur thermique (ACPI)" Margin="0,8,0,0"/>
                   <TextBlock x:Name="TxtCpuTemp" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,8,0,0" Text="..."/>
                 </Grid>
                 <Border x:Name="HeatBox" CornerRadius="8" Padding="12,9" Margin="0,14,0,0" Background="#1B2130">
@@ -1120,6 +1220,9 @@ try {
     if ($IsLaptop) { $tips.Add((Tr 'PC portable : jouez branché sur secteur, laissez de l''espace sous et derrière le PC (support ventilé) et dépoussiérez les grilles. L''option « Anti-surchauffe : limiter le processeur à 99 % » réduit beaucoup la chaleur.')) }
     $tips.Add((Tr 'Limitez les images par seconde à la fréquence de votre écran (60, 144, 165 Hz...) avec la V-Sync ou le limiteur du pilote : la carte graphique travaille moins et chauffe moins, sans perte visible.'))
     $tips.Add((Tr 'Un PC propre chauffe moins : un dépoussiérage des ventilateurs tous les 6 à 12 mois fait souvent baisser la température de plusieurs degrés.'))
+    if (Test-IntelRaptorDesktop $CpuName) {
+        [void]$PanelTips.Children.Add((New-Text ('⚠  ' + (Tr 'Processeur Intel Core de 13e/14e génération (PC de bureau) détecté : Intel a publié des mises à jour du microcode qui corrigent un problème d''instabilité de ces processeurs. Installez le dernier BIOS du fabricant de votre carte mère (avec le microcode 0x12B ou plus récent) et gardez les réglages Intel par défaut (« Intel Default Settings »).')) '#F0B429' 13 -Margin (Th 0 0 0 8)))
+    }
     foreach ($tip in $tips) { [void]$PanelTips.Children.Add((New-Text ('•  ' + $tip) '#C3CAD6' 13 -Margin (Th 0 0 0 6))) }
 
     if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') 'https://www.nvidia.com/fr-fr/software/nvidia-app/')) }
@@ -1534,7 +1637,7 @@ try {
         }
         if ($null -ne $s.CpuTemp) {
             $hasTemp = $true
-            $level = [Math]::Max($level, (Set-TempText $TxtCpuTemp $s.CpuTemp 80 90 (Tr '   (capteur ACPI, approximatif)')))
+            $level = [Math]::Max($level, (Set-TempText $TxtCpuTemp $s.CpuTemp 80 90 (Tr '   (souvent la carte mère, pas le processeur)')))
         } else {
             $TxtCpuTemp.Text = Tr 'Non disponible sans l''outil du fabricant'; $TxtCpuTemp.Foreground = (Br '#97A1B3')
         }
@@ -1559,6 +1662,37 @@ try {
     $Timer.Add_Tick({ try { Update-Monitor } catch { } })
 
     $Window.Add_Loaded({ $Timer.Start() })
+
+    if ($CaptureDir) {
+        # Mode test : une image PNG par onglet, puis fermeture (aucun réglage n'est modifié)
+        $script:CaptureTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:CaptureTimer.Interval = [TimeSpan]::FromSeconds(5)
+        $script:CaptureTimer.Add_Tick({
+            $script:CaptureTimer.Stop()
+            try {
+                if (-not (Test-Path -LiteralPath $CaptureDir)) { New-Item -ItemType Directory -Path $CaptureDir -Force | Out-Null }
+                for ($i = 0; $i -lt $Tabs.Items.Count; $i++) {
+                    $Tabs.SelectedIndex = $i
+                    $Window.UpdateLayout(); Invoke-UIPump
+                    $root = $Window.Content
+                    $rtb = [System.Windows.Media.Imaging.RenderTargetBitmap]::new([int]$root.ActualWidth, [int]$root.ActualHeight, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
+                    $bg = New-Object System.Windows.Media.DrawingVisual
+                    $dc = $bg.RenderOpen()
+                    $dc.DrawRectangle($Window.Background, $null, [System.Windows.Rect]::new(0, 0, $root.ActualWidth, $root.ActualHeight))
+                    $dc.Close()
+                    $rtb.Render($bg); $rtb.Render($root)
+                    $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+                    $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($rtb))
+                    $fs = [IO.File]::Create((Join-Path $CaptureDir ('{0}-{1}.png' -f $Lang, $i)))
+                    try { $enc.Save($fs) } finally { $fs.Close() }
+                }
+            } catch {
+                Write-Log ('Capture : ' + $_.Exception.Message)
+            }
+            $Window.Close()
+        })
+        $Window.Add_ContentRendered({ $script:CaptureTimer.Start() })
+    }
     $Window.Add_Closed({
         $Timer.Stop()
         $script:Sync.Run = $false
