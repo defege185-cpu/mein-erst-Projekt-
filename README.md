@@ -43,6 +43,10 @@ Aucune application ne détecte 100 % des caméras ou micros. Des fausses alertes
 ---
 
 # Optimiseur PC (Windows 10 / 11)
+
+[![Démonstration de l'Optimiseur PC](optimiseur-windows/demo/apercu.gif)](optimiseur-windows/demo/demo-optimiseur-pc.mp4)
+
+▶ [Vidéo de démonstration (1 min)](optimiseur-windows/demo/demo-optimiseur-pc.mp4)
 Application séparée dans le dossier [`optimiseur-windows`](optimiseur-windows/README.md) : optimise Windows pour
 les jeux et le télétravail sans surchauffe, retire les applications inutiles, chaque changement coché, confirmé et annulable.
 Téléchargement : https://github.com/defege185-cpu/mein-erst-Projekt-/releases/latest — puis double-clic sur `Lancer-Optimiseur.bat`. Langues : français, anglais, allemand.
