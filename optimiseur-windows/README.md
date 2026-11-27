@@ -6,7 +6,9 @@ AMD Radeon, Intel Arc/Iris) et tous les processeurs Intel et AMD, car elle ne to
 au matériel.
 
 ## Démarrer
-1. Télécharger le dossier `optimiseur-windows` (bouton **Code → Download ZIP** sur GitHub), puis le décompresser.
+1. Télécharger **`OptimiseurPC-<version>.zip`** sur la page des publications :
+   https://github.com/defege185-cpu/mein-erst-Projekt-/releases/latest
+   puis clic droit → **Extraire tout**.
 2. Double-cliquer sur **`Lancer-Optimiseur.bat`**.
 3. Répondre **Oui** quand Windows demande l'autorisation administrateur.
 

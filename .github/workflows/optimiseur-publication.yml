@@ -1,0 +1,55 @@
+name: Optimiseur Windows - publication
+
+# Crée une publication GitHub (Release) avec un ZIP de l'application chaque fois qu'une
+# nouvelle version ($AppVersion dans OptimiseurPC.ps1) arrive sur main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'optimiseur-windows/**'
+      - '.github/optimiseur-notes.md'
+      - '.github/workflows/optimiseur-publication.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publication:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: |
+          v=$(grep -oP "^\\\$AppVersion\s*=\s*'\K[0-9][0-9.]*" optimiseur-windows/OptimiseurPC.ps1)
+          test -n "$v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version : $v"
+      - name: Publication déjà existante ?
+        id: deja
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "optimiseur-v${{ steps.v.outputs.version }}" > /dev/null 2>&1; then
+            echo "existe=1" >> "$GITHUB_OUTPUT"
+            echo "La version ${{ steps.v.outputs.version }} est déjà publiée : rien à faire."
+          fi
+      - name: ZIP de l'application
+        if: steps.deja.outputs.existe != '1'
+        run: |
+          mkdir -p dist
+          cd optimiseur-windows
+          zip -r -X "../dist/OptimiseurPC-${{ steps.v.outputs.version }}.zip" \
+            Lancer-Optimiseur.bat OptimiseurPC.ps1 langues README.md LICENSE.txt
+          unzip -l "../dist/OptimiseurPC-${{ steps.v.outputs.version }}.zip"
+      - name: Créer la publication
+        if: steps.deja.outputs.existe != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sed "s/__VERSION__/${{ steps.v.outputs.version }}/g" .github/optimiseur-notes.md > notes.md
+          gh release create "optimiseur-v${{ steps.v.outputs.version }}" \
+            "dist/OptimiseurPC-${{ steps.v.outputs.version }}.zip" \
+            --title "Optimiseur PC ${{ steps.v.outputs.version }}" \
+            --notes-file notes.md --target "${{ github.sha }}" --latest
