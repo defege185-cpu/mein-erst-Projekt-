@@ -3,3 +3,4 @@ optimiseur-windows/*.bat -text
 optimiseur-windows/*.ps1 -text
 optimiseur-windows/tests/*.ps1 -text
 optimiseur-windows/langues/*.json -text
+optimiseur-windows/LICENSE.txt -text
