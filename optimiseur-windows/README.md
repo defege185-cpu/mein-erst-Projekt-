@@ -15,6 +15,15 @@ au matériel.
 
 Rien d'autre à installer : l'application utilise Windows PowerShell 5.1, déjà présent dans Windows 10 et 11.
 
+## Langues
+Français, English, Deutsch. L'application s'ouvre dans la langue de Windows (anglais si elle n'est pas disponible).
+Pour changer : menu **Langue** en haut à droite de la fenêtre ; l'application redémarre aussitôt dans la langue choisie
+et s'en souvient. Gardez le dossier `langues` à côté de `OptimiseurPC.ps1`.
+
+Ajouter une langue : copier `langues/en.json` sous le nom du code de la langue (par ex. `es.json`), changer `@langue`
+(nom affiché dans le menu), puis traduire chaque valeur (à droite) sans toucher aux textes français (à gauche) ni aux `{0}`, `{1}`.
+Le test automatique signale tout texte oublié.
+
 ## Les onglets
 | Onglet | Rôle |
 |---|---|
@@ -74,6 +83,6 @@ applications Xbox (utiles pour Game Pass, la Game Bar et les manettes) ou du Mic
   La température carte graphique est lue pour les cartes NVIDIA (outil `nvidia-smi` installé avec le pilote officiel).
 
 ## Tests
-`tests/Test-Optimiseur.ps1` vérifie la syntaxe, l'interface et **applique puis restaure chaque réglage** pour contrôler
+`tests/Test-Optimiseur.ps1` vérifie la syntaxe, l'interface, que chaque texte est traduit dans toutes les langues, et **applique puis restaure chaque réglage** pour contrôler
 que l'état d'origine revient exactement. À lancer uniquement sur une machine de test. Ces tests tournent automatiquement
 sur Windows Server 2022 et 2025 (GitHub Actions) à chaque modification du dossier.

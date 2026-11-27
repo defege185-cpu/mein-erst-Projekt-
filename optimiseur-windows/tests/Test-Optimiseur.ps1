@@ -64,7 +64,51 @@ Check 'Interface XAML' {
     $null -ne $w.FindName('BtnApply') -and $null -ne $w.FindName('PanelTweaks')
 }
 
-# 4. Appliquer puis restaurer chaque réglage ---------------------------------------------------
+# 4. Langues -----------------------------------------------------------------------------------
+$Texts = New-Object 'System.Collections.Generic.HashSet[string]'
+function Add-Text([string]$t) { if ($t -and $t -match '\p{L}') { [void]$Texts.Add($t.Replace('\n', "`n")) } }
+$scriptAst = [System.Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
+$trCalls = $scriptAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Tr' }, $true)
+foreach ($c in $trCalls) {
+    $a = $c.CommandElements[1]
+    if ($a -is [System.Management.Automation.Language.StringConstantExpressionAst]) { Add-Text $a.Value }
+}
+foreach ($t in $Tweaks) { Add-Text $t.Name; Add-Text $t.Desc; Add-Text $t.Warn }
+foreach ($c in $Categories) { Add-Text $c.Title; Add-Text $c.Sub }
+foreach ($a in $AppCatalog) { Add-Text $a.N; Add-Text $a.Note }
+foreach ($v in $ProfileLabels.Values) { Add-Text $v }
+foreach ($node in ([xml]$XamlText).SelectNodes('//*')) {
+    foreach ($attr in 'Text', 'Content', 'Header', 'Title') { $v = $node.GetAttribute($attr); if ($v -notmatch '^\{') { Add-Text $v } }
+}
+Write-Host "         $($Texts.Count) textes à traduire"
+Check 'Langues anglais et allemand chargées' { $Languages.Contains('en') -and $Languages.Contains('de') }
+foreach ($code in @($Languages.Keys | Where-Object { $_ -ne 'fr' })) {
+    Check "Traduction complète : $code" {
+        $missing = @($Texts | Where-Object { -not $Languages[$code].ContainsKey($_) })
+        if ($missing.Count) { throw ('{0} texte(s) sans traduction, ex. : {1}' -f $missing.Count, (($missing | Select-Object -First 5) -join ' | ')) }
+        $true
+    }
+    Check "Paramètres {0} conservés : $code" {
+        foreach ($k in $Texts) {
+            $v = $Languages[$code][$k]
+            $a = @([regex]::Matches($k, '\{\d[^}]*\}') | ForEach-Object Value | Sort-Object) -join ','
+            $b = @([regex]::Matches($v, '\{\d[^}]*\}') | ForEach-Object Value | Sort-Object) -join ','
+            if ($a -ne $b) { throw "« $k »" }
+        }
+        $true
+    }
+    Check "Interface traduite : $code" {
+        $Lang = $code; $Dict = $Languages[$code]
+        $x = [xml]$XamlText
+        Convert-XamlLanguage $x
+        $w = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $x))
+        $ok = $null -ne $w.FindName('CmbLang')
+        $Lang = 'fr'; $Dict = $Languages['fr']
+        $ok
+    }
+}
+
+# 5. Appliquer puis restaurer chaque réglage ---------------------------------------------------
 function Get-State($t) {
     $parts = @(foreach ($r in $t.Reg) { $c = Read-Reg $r.Path $r.Name; '{0}={1}|{2}' -f $r.Name, $c.Exists, $c.Value })
     $parts += 'applied=' + (Test-TweakApplied $t)

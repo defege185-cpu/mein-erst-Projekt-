@@ -17,7 +17,8 @@
 [CmdletBinding()]
 param(
     [switch]$TestMode,
-    [string]$DataPath
+    [string]$DataPath,
+    [string]$Lang
 )
 
 Set-StrictMode -Off
@@ -28,6 +29,44 @@ if ($env:OS -ne 'Windows_NT') {
     Write-Error 'Cette application fonctionne uniquement sous Windows 10 et Windows 11.'
     return
 }
+
+# ---------------------------------------------------------------------------------------------
+#  Langues : français intégré, autres langues dans le dossier « langues » (fichiers JSON
+#  « texte français » -> « traduction »). Pour ajouter une langue : copier en.json et le traduire.
+# ---------------------------------------------------------------------------------------------
+if (-not $DataPath) { $DataPath = Join-Path $env:LOCALAPPDATA 'OptimiseurPC' }
+if (-not (Test-Path -LiteralPath $DataPath)) { New-Item -ItemType Directory -Path $DataPath -Force | Out-Null }
+$SettingsFile = Join-Path $DataPath 'parametres.json'
+
+$Languages = [ordered]@{ fr = @{ '@langue' = 'Français' } }
+$LangDir = Join-Path $PSScriptRoot 'langues'
+if (Test-Path -LiteralPath $LangDir) {
+    foreach ($f in @(Get-ChildItem -LiteralPath $LangDir -Filter '*.json' -File | Sort-Object Name)) {
+        try {
+            $obj = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $h = @{}
+            foreach ($prop in $obj.PSObject.Properties) { $h[$prop.Name] = [string]$prop.Value }
+            if ($h.ContainsKey('@langue')) { $Languages[$f.BaseName.ToLower()] = $h }
+        } catch { }
+    }
+}
+if (-not $Lang) {
+    try {
+        if (Test-Path -LiteralPath $SettingsFile) { $Lang = [string](Get-Content -LiteralPath $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json).Lang }
+    } catch { }
+}
+if (-not $Lang) { $Lang = [Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName }
+$Lang = $Lang.ToLower()
+if (-not $Languages.Contains($Lang)) { if ($Languages.Contains('en')) { $Lang = 'en' } else { $Lang = 'fr' } }
+$Dict = $Languages[$Lang]
+
+# Traduit un texte français (\n = retour à la ligne). Sans traduction, le français est gardé.
+function Tr([string]$Text) {
+    $k = $Text.Replace('\n', "`n")
+    if ($Lang -ne 'fr' -and $Dict.ContainsKey($k)) { return $Dict[$k] }
+    return $k
+}
+$AppName = Tr 'Optimiseur PC'
 
 # ---------------------------------------------------------------------------------------------
 #  Droits administrateur (nécessaires pour les réglages système)
@@ -48,7 +87,7 @@ if (-not $TestMode -and -not (Test-Admin)) {
     } catch {
         Add-Type -AssemblyName PresentationFramework
         [void][System.Windows.MessageBox]::Show(
-            "L'application a besoin des droits administrateur pour modifier les paramètres de Windows.`n`nRelancez-la et répondez « Oui » à la question de Windows.",
+            (Tr 'L''application a besoin des droits administrateur pour modifier les paramètres de Windows.\n\nRelancez-la et répondez « Oui » à la question de Windows.'),
             $AppName, 'OK', 'Warning')
     }
     exit
@@ -233,7 +272,7 @@ $TweakDefs = @(
             param($items)
             $items.Add([pscustomobject]@{ Type = 'Power'; Guid = (Get-ActiveScheme) })
             & powercfg.exe /setactive $BalancedGuid | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'Le mode Équilibré est introuvable sur ce PC.' }
+            if ($LASTEXITCODE -ne 0) { throw (Tr 'Le mode Équilibré est introuvable sur ce PC.') }
         }
         Test = { (Get-ActiveScheme) -eq $BalancedGuid }
     }
@@ -246,7 +285,7 @@ $TweakDefs = @(
             param($items)
             $s = Get-ActiveScheme
             $v = Get-PowerSetting $s 'SUB_PROCESSOR' 'PROCTHROTTLEMAX'
-            if (-not $v) { throw 'Réglage du processeur illisible.' }
+            if (-not $v) { throw (Tr 'Réglage du processeur illisible.') }
             $items.Add([pscustomobject]@{ Type = 'PowerValue'; Scheme = $s; Sub = 'SUB_PROCESSOR'; Setting = 'PROCTHROTTLEMAX'; AC = $v.AC; DC = $v.DC })
             & powercfg.exe /setacvalueindex $s SUB_PROCESSOR PROCTHROTTLEMAX 99 | Out-Null
             & powercfg.exe /setdcvalueindex $s SUB_PROCESSOR PROCTHROTTLEMAX 99 | Out-Null
@@ -438,7 +477,7 @@ $TweakDefs = @(
                     try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $freed += $len; $count++ } catch { }
                 }
             }
-            Write-Log ('Nettoyage : {0} fichier(s) supprimé(s), {1:N1} Mo libérés.' -f $count, ($freed / 1MB))
+            Write-Log ((Tr 'Nettoyage : {0} fichier(s) supprimé(s), {1:N1} Mo libérés.') -f $count, ($freed / 1MB))
         }
     }
 )
@@ -482,7 +521,7 @@ function Import-Data {
         foreach ($e in @($d.Tweaks)) { if ($e -and $e.Id) { $Backup[$e.Id] = $e } }
         foreach ($a in @($d.Apps))   { if ($a -and $a.Family) { [void]$RemovedApps.Add($a) } }
     } catch {
-        Write-Log ('Fichier de sauvegarde illisible : ' + $_.Exception.Message)
+        Write-Log ((Tr 'Fichier de sauvegarde illisible : ') + $_.Exception.Message)
     }
 }
 
@@ -730,9 +769,13 @@ $XamlText = @'
     <!-- En-tête -->
     <Border Grid.Row="0" Padding="24,18,24,6">
       <DockPanel>
-        <Border DockPanel.Dock="Right" VerticalAlignment="Center" Background="#14301F" CornerRadius="10" Padding="12,5">
-          <TextBlock x:Name="TxtVersion" Foreground="#5BD48A" FontSize="12"/>
-        </Border>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="Langue" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
+          <ComboBox x:Name="CmbLang" Width="120" VerticalAlignment="Center" Margin="0,0,14,0" Cursor="Hand"/>
+          <Border VerticalAlignment="Center" Background="#14301F" CornerRadius="10" Padding="12,5">
+            <TextBlock x:Name="TxtVersion" Foreground="#5BD48A" FontSize="12"/>
+          </Border>
+        </StackPanel>
         <StackPanel>
           <TextBlock Text="Optimiseur PC" FontSize="26" FontWeight="Bold"/>
           <TextBlock x:Name="TxtSubtitle" Foreground="{StaticResource Muted}" Margin="0,2,0,0" TextWrapping="Wrap"/>
@@ -950,12 +993,21 @@ $XamlText = @'
 </Window>
 '@
 
+function Convert-XamlLanguage([xml]$Doc) {
+    foreach ($node in $Doc.SelectNodes('//*')) {
+        foreach ($attr in @('Text', 'Content', 'Header', 'Title')) {
+            $v = $node.GetAttribute($attr)
+            if ($v -and $v -notmatch '^\{') { $node.SetAttribute($attr, (Tr $v)) }
+        }
+    }
+}
+
 # En mode test, on s'arrête ici : toutes les fonctions et définitions sont chargées.
 if ($TestMode) { return }
 
 if ($Build -lt 10240) {
     Add-Type -AssemblyName PresentationFramework
-    [void][System.Windows.MessageBox]::Show('Cette application nécessite Windows 10 ou Windows 11.', $AppName, 'OK', 'Error')
+    [void][System.Windows.MessageBox]::Show((Tr 'Cette application nécessite Windows 10 ou Windows 11.'), $AppName, 'OK', 'Error')
     exit
 }
 
@@ -963,6 +1015,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
 try {
     [xml]$XamlXml = $XamlText
+    Convert-XamlLanguage $XamlXml
     $Window = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $XamlXml))
     foreach ($node in $XamlXml.SelectNodes('//*')) {
         $n = $node.GetAttribute('Name', 'http://schemas.microsoft.com/winfx/2006/xaml')
@@ -994,7 +1047,7 @@ try {
         $btn = New-Object System.Windows.Controls.Button
         $btn.Content = $Text; $btn.Tag = $Target
         $btn.Add_Click({
-            try { Start-Process $this.Tag } catch { Write-Log ('Impossible d''ouvrir : ' + $this.Tag) }
+            try { Start-Process $this.Tag } catch { Write-Log ((Tr 'Impossible d''ouvrir : ') + $this.Tag) }
         })
         return $btn
     }
@@ -1019,7 +1072,7 @@ try {
 
     function Format-Bullets([object[]]$Names) {
         $lines = @($Names | ForEach-Object { '   - ' + $_ })
-        if ($lines.Count -gt 25) { $lines = @($lines[0..23]) + ('   ... et {0} autre(s)' -f ($lines.Count - 24)) }
+        if ($lines.Count -gt 25) { $lines = @($lines[0..23]) + ((Tr '   ... et {0} autre(s)') -f ($lines.Count - 24)) }
         return ($lines -join "`n")
     }
 
@@ -1027,7 +1080,7 @@ try {
 
     # ------------------------- Matériel -------------------------
     $Cpu       = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
-    $CpuName   = if ($Cpu) { ($Cpu.Name -replace '\s+', ' ').Trim() } else { 'Inconnu' }
+    $CpuName   = if ($Cpu) { ($Cpu.Name -replace '\s+', ' ').Trim() } else { Tr 'Inconnu' }
     $CpuVendor = if ($CpuName -match 'AMD|Ryzen') { 'AMD' } elseif ($CpuName -match 'Intel') { 'Intel' } else { 'Autre' }
     $Gpus      = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
                    Where-Object { $_.Name -and $_.Name -notmatch 'Basic Display|Basic Render|Remote|Virtual|Hyper-V|Parsec|Mirage|DisplayLink|Meta' })
@@ -1042,52 +1095,52 @@ try {
     $OsCaption = if ($Os) { $Os.Caption -replace '^Microsoft ', '' } else { 'Windows' }
     $DispVer   = $CurrentVersionKey.DisplayVersion
 
-    $TxtVersion.Text  = "Version $AppVersion  -  Administrateur"
-    $TxtCpu.Text      = '{0}{1}' -f $CpuName, $(if ($Cpu) { "  ($($Cpu.NumberOfCores) cœurs / $($Cpu.NumberOfLogicalProcessors) threads)" } else { '' })
-    $TxtGpu.Text      = if ($Gpus.Count) { ($Gpus | ForEach-Object { '{0}  (pilote {1})' -f $_.Name.Trim(), $_.DriverVersion }) -join "`n" } else { 'Non détectée' }
-    $TxtRam.Text      = "$RamGB Go"
-    $TxtOs.Text       = '{0} {1} (build {2}){3}' -f $OsCaption, $DispVer, $Build, $(if ($IsLaptop) { '  -  PC portable' } else { '' })
-    $TxtSubtitle.Text = 'Jeux et télétravail, sans surchauffe  -  {0}  -  {1}' -f $OsCaption, $(if ($GpuNames.Count) { $GpuNames[0] } else { $CpuName })
-    $TxtDataPath.Text = "Sauvegardes et journal : $DataPath"
+    $TxtVersion.Text  = (Tr 'Version {0}  -  Administrateur') -f $AppVersion
+    $TxtCpu.Text      = '{0}{1}' -f $CpuName, $(if ($Cpu) { (Tr '  ({0} cœurs / {1} threads)') -f $Cpu.NumberOfCores, $Cpu.NumberOfLogicalProcessors } else { '' })
+    $TxtGpu.Text      = if ($Gpus.Count) { ($Gpus | ForEach-Object { (Tr '{0}  (pilote {1})') -f $_.Name.Trim(), $_.DriverVersion }) -join "`n" } else { Tr 'Non détectée' }
+    $TxtRam.Text      = (Tr '{0} Go') -f $RamGB
+    $TxtOs.Text       = '{0} {1} (build {2}){3}' -f $OsCaption, $DispVer, $Build, $(if ($IsLaptop) { Tr '  -  PC portable' } else { '' })
+    $TxtSubtitle.Text = (Tr 'Jeux et télétravail, sans surchauffe  -  {0}  -  {1}') -f $OsCaption, $(if ($GpuNames.Count) { $GpuNames[0] } else { $CpuName })
+    $TxtDataPath.Text = (Tr 'Sauvegardes et journal : {0}') -f $DataPath
 
     # ------------------------- Conseils -------------------------
     $tips = New-Object System.Collections.Generic.List[string]
     if ($HasNvidia) {
-        $tips.Add('Carte NVIDIA : mettez à jour le pilote avec l''application officielle NVIDIA App. Dans les jeux compatibles, activez DLSS et NVIDIA Reflex : plus d''images par seconde et moins de chaleur.')
-        $GpuTempHint = 'Non disponible (pilote NVIDIA introuvable)'
+        $tips.Add((Tr 'Carte NVIDIA : mettez à jour le pilote avec l''application officielle NVIDIA App. Dans les jeux compatibles, activez DLSS et NVIDIA Reflex : plus d''images par seconde et moins de chaleur.'))
+        $GpuTempHint = Tr 'Non disponible (pilote NVIDIA introuvable)'
     }
     if ($HasAmdGpu) {
-        $tips.Add('Carte AMD Radeon : mettez à jour le pilote avec AMD Software: Adrenalin Edition. Activez FSR et Radeon Anti-Lag dans les jeux ; Radeon Chill réduit fortement la chauffe.')
+        $tips.Add((Tr 'Carte AMD Radeon : mettez à jour le pilote avec AMD Software: Adrenalin Edition. Activez FSR et Radeon Anti-Lag dans les jeux ; Radeon Chill réduit fortement la chauffe.'))
     }
     if ($HasIntelGpu) {
-        $tips.Add('Graphique Intel : mettez à jour le pilote avec Intel Driver & Support Assistant (ou le site du fabricant de votre PC portable). Activez XeSS dans les jeux compatibles.')
+        $tips.Add((Tr 'Graphique Intel : mettez à jour le pilote avec Intel Driver & Support Assistant (ou le site du fabricant de votre PC portable). Activez XeSS dans les jeux compatibles.'))
     }
-    if ($CpuVendor -eq 'AMD') { $tips.Add('Processeur AMD Ryzen : installez le pilote « chipset » AMD depuis le site officiel ; il améliore la gestion de l''énergie avec le mode Équilibré.') }
-    if ($CpuVendor -eq 'Intel') { $tips.Add('Processeur Intel : les mises à jour de pilotes et du BIOS se font via Intel Driver & Support Assistant ou le site du fabricant de votre PC.') }
-    if ($IsLaptop) { $tips.Add('PC portable : jouez branché sur secteur, laissez de l''espace sous et derrière le PC (support ventilé) et dépoussiérez les grilles. L''option « Anti-surchauffe : limiter le processeur à 99 % » réduit beaucoup la chaleur.') }
-    $tips.Add('Limitez les images par seconde à la fréquence de votre écran (60, 144, 165 Hz...) avec la V-Sync ou le limiteur du pilote : la carte graphique travaille moins et chauffe moins, sans perte visible.')
-    $tips.Add('Un PC propre chauffe moins : un dépoussiérage des ventilateurs tous les 6 à 12 mois fait souvent baisser la température de plusieurs degrés.')
+    if ($CpuVendor -eq 'AMD') { $tips.Add((Tr 'Processeur AMD Ryzen : installez le pilote « chipset » AMD depuis le site officiel ; il améliore la gestion de l''énergie avec le mode Équilibré.')) }
+    if ($CpuVendor -eq 'Intel') { $tips.Add((Tr 'Processeur Intel : les mises à jour de pilotes et du BIOS se font via Intel Driver & Support Assistant ou le site du fabricant de votre PC.')) }
+    if ($IsLaptop) { $tips.Add((Tr 'PC portable : jouez branché sur secteur, laissez de l''espace sous et derrière le PC (support ventilé) et dépoussiérez les grilles. L''option « Anti-surchauffe : limiter le processeur à 99 % » réduit beaucoup la chaleur.')) }
+    $tips.Add((Tr 'Limitez les images par seconde à la fréquence de votre écran (60, 144, 165 Hz...) avec la V-Sync ou le limiteur du pilote : la carte graphique travaille moins et chauffe moins, sans perte visible.'))
+    $tips.Add((Tr 'Un PC propre chauffe moins : un dépoussiérage des ventilateurs tous les 6 à 12 mois fait souvent baisser la température de plusieurs degrés.'))
     foreach ($tip in $tips) { [void]$PanelTips.Children.Add((New-Text ('•  ' + $tip) '#C3CAD6' 13 -Margin (Th 0 0 0 6))) }
 
-    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton 'Pilote NVIDIA (site officiel)' 'https://www.nvidia.com/fr-fr/software/nvidia-app/')) }
-    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton 'Pilotes AMD (site officiel)' 'https://www.amd.com/fr/support/download/drivers.html')) }
-    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton 'Pilotes Intel (site officiel)' 'https://www.intel.fr/content/www/fr/fr/support/detect.html')) }
-    [void]$PanelLinks.Children.Add((New-ActionButton 'Windows Update' 'ms-settings:windowsupdate'))
-    [void]$PanelLinks.Children.Add((New-ActionButton 'Applications au démarrage' 'ms-settings:startupapps'))
-    [void]$PanelLinks.Children.Add((New-ActionButton 'Stockage' 'ms-settings:storagesense'))
-    [void]$PanelLinks.Children.Add((New-ActionButton 'Gestionnaire des tâches' 'taskmgr.exe'))
+    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') 'https://www.nvidia.com/fr-fr/software/nvidia-app/')) }
+    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes AMD (site officiel)') 'https://www.amd.com/fr/support/download/drivers.html')) }
+    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes Intel (site officiel)') 'https://www.intel.fr/content/www/fr/fr/support/detect.html')) }
+    [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Windows Update') 'ms-settings:windowsupdate'))
+    [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Applications au démarrage') 'ms-settings:startupapps'))
+    [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Stockage') 'ms-settings:storagesense'))
+    [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Gestionnaire des tâches') 'taskmgr.exe'))
 
     if (-not $GpuTempHint) {
-        if ($HasAmdGpu) { $GpuTempHint = 'Visible dans AMD Software (Alt+R) ou le Gestionnaire des tâches' }
-        elseif ($HasIntelGpu) { $GpuTempHint = 'Visible dans le logiciel graphique Intel ou le Gestionnaire des tâches' }
-        else { $GpuTempHint = 'Non disponible' }
+        if ($HasAmdGpu) { $GpuTempHint = Tr 'Visible dans AMD Software (Alt+R) ou le Gestionnaire des tâches' }
+        elseif ($HasIntelGpu) { $GpuTempHint = Tr 'Visible dans le logiciel graphique Intel ou le Gestionnaire des tâches' }
+        else { $GpuTempHint = Tr 'Non disponible' }
     }
 
     # ------------------------- Liste des optimisations -------------------------
     $script:TweakBoxes = New-Object System.Collections.Generic.List[object]
 
     function Update-SelCount {
-        $BtnApply.Content = 'Appliquer la sélection ({0})' -f (Get-CheckedCount $script:TweakBoxes)
+        $BtnApply.Content = (Tr 'Appliquer la sélection ({0})') -f (Get-CheckedCount $script:TweakBoxes)
     }
 
     function Build-TweakList {
@@ -1095,30 +1148,30 @@ try {
         foreach ($cat in $Categories) {
             $list = @($Tweaks | Where-Object { $_.Cat -eq $cat.Id -and (Test-TweakAvailable $_) })
             if ($list.Count -eq 0) { continue }
-            [void]$PanelTweaks.Children.Add((New-Text $cat.Title '#FFFFFF' 17 -Bold -Margin (Th 2 12 0 2)))
-            [void]$PanelTweaks.Children.Add((New-Text $cat.Sub '#97A1B3' 12.5 -Margin (Th 2 0 0 10)))
+            [void]$PanelTweaks.Children.Add((New-Text (Tr $cat.Title) '#FFFFFF' 17 -Bold -Margin (Th 2 12 0 2)))
+            [void]$PanelTweaks.Children.Add((New-Text (Tr $cat.Sub) '#97A1B3' 12.5 -Margin (Th 2 0 0 10)))
             foreach ($t in $list) {
                 $applied = $t.Undoable -and (Test-TweakApplied $t)
                 $card = New-Object System.Windows.Controls.Border
                 $card.Style = $Window.FindResource('ItemCard')
                 $sp = New-Object System.Windows.Controls.StackPanel
                 $cb = New-Object System.Windows.Controls.CheckBox
-                $cb.Content = (New-Text $t.Name '#E6E9EF' 14 -Bold)
+                $cb.Content = (New-Text (Tr $t.Name) '#E6E9EF' 14 -Bold)
                 $cb.Tag = $t
                 $cb.Add_Checked({ Update-SelCount })
                 $cb.Add_Unchecked({ Update-SelCount })
                 [void]$sp.Children.Add($cb)
-                [void]$sp.Children.Add((New-Text $t.Desc '#97A1B3' 12.5 -Margin (Th 21 4 0 0)))
+                [void]$sp.Children.Add((New-Text (Tr $t.Desc) '#97A1B3' 12.5 -Margin (Th 21 4 0 0)))
                 $wp = New-Object System.Windows.Controls.WrapPanel
                 $wp.Margin = (Th 21 2 0 0)
                 if ($applied) {
                     $cb.IsEnabled = $false
-                    [void]$wp.Children.Add((New-Badge 'Déjà actif' '#5BD48A' '#14301F'))
+                    [void]$wp.Children.Add((New-Badge (Tr 'Déjà actif') '#5BD48A' '#14301F'))
                 }
-                if ($t.Reboot)       { [void]$wp.Children.Add((New-Badge 'Redémarrage requis' '#F0B429' '#33290F')) }
-                if (-not $t.Undoable) { [void]$wp.Children.Add((New-Badge 'Non annulable' '#F28B82' '#3A1A1A')) }
-                if ($t.Warn)         { [void]$wp.Children.Add((New-Badge $t.Warn '#F0B429' '#33290F')) }
-                foreach ($p in $t.Profiles) { [void]$wp.Children.Add((New-Badge $ProfileLabels[$p] '#9DB7F5' '#1B2740')) }
+                if ($t.Reboot)       { [void]$wp.Children.Add((New-Badge (Tr 'Redémarrage requis') '#F0B429' '#33290F')) }
+                if (-not $t.Undoable) { [void]$wp.Children.Add((New-Badge (Tr 'Non annulable') '#F28B82' '#3A1A1A')) }
+                if ($t.Warn)         { [void]$wp.Children.Add((New-Badge (Tr $t.Warn) '#F0B429' '#33290F')) }
+                foreach ($p in $t.Profiles) { [void]$wp.Children.Add((New-Badge (Tr $ProfileLabels[$p]) '#9DB7F5' '#1B2740')) }
                 [void]$sp.Children.Add($wp)
                 $card.Child = $sp
                 [void]$PanelTweaks.Children.Add($card)
@@ -1134,8 +1187,8 @@ try {
         }
         Update-SelCount
         $n = Get-CheckedCount $script:TweakBoxes
-        if ($Name -and $n -eq 0) { Show-Info 'Toutes les optimisations de cette suggestion sont déjà actives sur ce PC.' }
-        elseif ($Name) { Write-Log ("Suggestion « {0} » : {1} case(s) cochée(s). Rien n'est encore modifié." -f $ProfileLabels[$Name], $n) }
+        if ($Name -and $n -eq 0) { Show-Info (Tr 'Toutes les optimisations de cette suggestion sont déjà actives sur ce PC.') }
+        elseif ($Name) { Write-Log ((Tr 'Suggestion « {0} » : {1} case(s) cochée(s). Rien n''est encore modifié.') -f (Tr $ProfileLabels[$Name]), $n) }
     }
 
     # ------------------------- Point de restauration -------------------------
@@ -1144,7 +1197,7 @@ try {
         $out = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue)
         Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
         if ($out.Count) { return [string]$out[-1] }
-        return 'ERREUR : aucune réponse'
+        return (Tr 'ERREUR : aucune réponse')
     }
 
     function Invoke-RestorePointJob([bool]$Enable) {
@@ -1160,7 +1213,7 @@ try {
     }
 
     function New-RestorePointUI {
-        Show-Busy "Création du point de restauration Windows...`nCela peut prendre jusqu'à une minute."
+        Show-Busy (Tr 'Création du point de restauration Windows...\nCela peut prendre jusqu''à une minute.')
         $srKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
         $freq = Read-Reg $srKey 'SystemRestorePointCreationFrequency'
         $ok = $false
@@ -1170,13 +1223,13 @@ try {
             $r = Invoke-RestorePointJob $false
             if ($r -eq 'OK') { $ok = $true }
             else {
-                Write-Log ('Point de restauration : ' + $r)
+                Write-Log ((Tr 'Point de restauration : ') + $r)
                 Hide-Busy
-                if (Confirm-Action ("Le point de restauration n'a pas pu être créé.`n$r`n`nLa protection du système est peut-être désactivée.`nVoulez-vous l'activer sur le disque $env:SystemDrive et réessayer ?`n(Windows utilisera un peu d'espace disque pour les points de restauration.)") 'Warning') {
-                    Show-Busy 'Activation de la protection du système et nouvelle tentative...'
+                if (Confirm-Action ((Tr 'Le point de restauration n''a pas pu être créé.\n{0}\n\nLa protection du système est peut-être désactivée.\nVoulez-vous l''activer sur le disque {1} et réessayer ?\n(Windows utilisera un peu d''espace disque pour les points de restauration.)') -f $r, $env:SystemDrive) 'Warning') {
+                    Show-Busy (Tr 'Activation de la protection du système et nouvelle tentative...')
                     $r = Invoke-RestorePointJob $true
-                    if ($r -eq 'OK') { $ok = $true; Write-Log 'Protection du système activée.' }
-                    else { Write-Log ('Point de restauration : ' + $r) }
+                    if ($r -eq 'OK') { $ok = $true; Write-Log (Tr 'Protection du système activée.') }
+                    else { Write-Log ((Tr 'Point de restauration : ') + $r) }
                 }
             }
         } finally {
@@ -1184,13 +1237,13 @@ try {
             else { Remove-ItemProperty -LiteralPath $srKey -Name 'SystemRestorePointCreationFrequency' -ErrorAction SilentlyContinue }
             Hide-Busy
         }
-        if ($ok) { Write-Log 'Point de restauration créé.' }
+        if ($ok) { Write-Log (Tr 'Point de restauration créé.') }
         return $ok
     }
 
     function Request-Restart([string]$Text) {
-        if (Confirm-Action ($Text + "`n`nRedémarrer l'ordinateur maintenant ?`n(Enregistrez d'abord votre travail en cours.)")) {
-            try { Restart-Computer -ErrorAction Stop } catch { Show-Info ('Redémarrage impossible : ' + $_.Exception.Message) 'Warning' }
+        if (Confirm-Action ($Text + "`n`n" + (Tr 'Redémarrer l''ordinateur maintenant ?\n(Enregistrez d''abord votre travail en cours.)'))) {
+            try { Restart-Computer -ErrorAction Stop } catch { Show-Info ((Tr 'Redémarrage impossible : ') + $_.Exception.Message) 'Warning' }
         }
     }
 
@@ -1198,30 +1251,30 @@ try {
     $script:AppBoxes = New-Object System.Collections.Generic.List[object]
 
     function Update-AppCount {
-        $BtnRemoveApps.Content = 'Désinstaller la sélection ({0})' -f (Get-CheckedCount $script:AppBoxes)
+        $BtnRemoveApps.Content = (Tr 'Désinstaller la sélection ({0})') -f (Get-CheckedCount $script:AppBoxes)
     }
 
     function Build-AppList {
         $PanelApps.Children.Clear(); $script:AppBoxes.Clear()
         $apps = @(Get-BloatApps)
         if ($apps.Count -eq 0) {
-            [void]$PanelApps.Children.Add((New-Text 'Aucune application inutile connue n''est installée sur ce compte.' '#5BD48A' 14 -Margin (Th 4 8 0 0)))
+            [void]$PanelApps.Children.Add((New-Text (Tr 'Aucune application inutile connue n''est installée sur ce compte.') '#5BD48A' 14 -Margin (Th 4 8 0 0)))
         }
         foreach ($a in @($apps | Sort-Object @{ Expression = 'Suggest'; Descending = $true }, Name)) {
             $card = New-Object System.Windows.Controls.Border
             $card.Style = $Window.FindResource('ItemCard')
             $sp = New-Object System.Windows.Controls.StackPanel
             $cb = New-Object System.Windows.Controls.CheckBox
-            $cb.Content = (New-Text $a.Name '#E6E9EF' 14 -Bold)
+            $cb.Content = (New-Text (Tr $a.Name) '#E6E9EF' 14 -Bold)
             $cb.Tag = $a
             $cb.Add_Checked({ Update-AppCount }); $cb.Add_Unchecked({ Update-AppCount })
             [void]$sp.Children.Add($cb)
             $info = $a.PkgName
-            if ($a.Note) { $info = $a.Note + '   (' + $a.PkgName + ')' }
+            if ($a.Note) { $info = (Tr $a.Note) + '   (' + $a.PkgName + ')' }
             [void]$sp.Children.Add((New-Text $info '#97A1B3' 12.5 -Margin (Th 21 3 0 0)))
             if ($a.Suggest) {
                 $wp = New-Object System.Windows.Controls.WrapPanel; $wp.Margin = (Th 21 0 0 0)
-                [void]$wp.Children.Add((New-Badge 'Suggérée' '#9DB7F5' '#1B2740'))
+                [void]$wp.Children.Add((New-Badge (Tr 'Suggérée') '#9DB7F5' '#1B2740'))
                 [void]$sp.Children.Add($wp)
             }
             $card.Child = $sp
@@ -1235,25 +1288,25 @@ try {
     $script:UndoBoxes = New-Object System.Collections.Generic.List[object]
 
     function Update-UndoCount {
-        $BtnUndo.Content = 'Restaurer la sélection ({0})' -f (Get-CheckedCount $script:UndoBoxes)
+        $BtnUndo.Content = (Tr 'Restaurer la sélection ({0})') -f (Get-CheckedCount $script:UndoBoxes)
     }
 
     function Build-UndoList {
         $PanelUndo.Children.Clear(); $script:UndoBoxes.Clear()
         $entries = @($Backup.Values | Sort-Object Date)
         if ($entries.Count -eq 0) {
-            [void]$PanelUndo.Children.Add((New-Text 'Aucun réglage modifié par l''application pour le moment.' '#97A1B3' 13 -Margin (Th 4 0 0 0)))
+            [void]$PanelUndo.Children.Add((New-Text (Tr 'Aucun réglage modifié par l''application pour le moment.') '#97A1B3' 13 -Margin (Th 4 0 0 0)))
         }
         foreach ($e in $entries) {
             $card = New-Object System.Windows.Controls.Border
             $card.Style = $Window.FindResource('ItemCard')
             $sp = New-Object System.Windows.Controls.StackPanel
             $cb = New-Object System.Windows.Controls.CheckBox
-            $cb.Content = (New-Text $e.Name '#E6E9EF' 14 -Bold)
+            $cb.Content = (New-Text (Tr $e.Name) '#E6E9EF' 14 -Bold)
             $cb.Tag = $e
             $cb.Add_Checked({ Update-UndoCount }); $cb.Add_Unchecked({ Update-UndoCount })
             [void]$sp.Children.Add($cb)
-            [void]$sp.Children.Add((New-Text ('Modifié le ' + $e.Date) '#97A1B3' 12.5 -Margin (Th 21 3 0 0)))
+            [void]$sp.Children.Add((New-Text ((Tr 'Modifié le ') + $e.Date) '#97A1B3' 12.5 -Margin (Th 21 3 0 0)))
             $card.Child = $sp
             [void]$PanelUndo.Children.Add($card)
             $script:UndoBoxes.Add($cb)
@@ -1262,20 +1315,20 @@ try {
 
         $PanelRemoved.Children.Clear()
         if ($RemovedApps.Count -eq 0) {
-            [void]$PanelRemoved.Children.Add((New-Text 'Aucune application désinstallée par l''application.' '#97A1B3' 13 -Margin (Th 4 0 0 0)))
+            [void]$PanelRemoved.Children.Add((New-Text (Tr 'Aucune application désinstallée par l''application.') '#97A1B3' 13 -Margin (Th 4 0 0 0)))
         }
         foreach ($a in $RemovedApps) {
             $card = New-Object System.Windows.Controls.Border
             $card.Style = $Window.FindResource('ItemCard')
             $dp = New-Object System.Windows.Controls.DockPanel
-            $btn = New-ActionButton 'Réinstaller depuis le Microsoft Store' ('ms-windows-store://pdp/?PFN=' + $a.Family)
+            $btn = New-ActionButton (Tr 'Réinstaller depuis le Microsoft Store') ('ms-windows-store://pdp/?PFN=' + $a.Family)
             $btn.Margin = (Th 12 0 0 0)
             [System.Windows.Controls.DockPanel]::SetDock($btn, [System.Windows.Controls.Dock]::Right)
             [void]$dp.Children.Add($btn)
             $sp = New-Object System.Windows.Controls.StackPanel
             $sp.VerticalAlignment = 'Center'
-            [void]$sp.Children.Add((New-Text $a.Name '#E6E9EF' 14 -Bold))
-            [void]$sp.Children.Add((New-Text ('Désinstallée le ' + $a.Date) '#97A1B3' 12.5))
+            [void]$sp.Children.Add((New-Text (Tr $a.Name) '#E6E9EF' 14 -Bold))
+            [void]$sp.Children.Add((New-Text ((Tr 'Désinstallée le ') + $a.Date) '#97A1B3' 12.5))
             [void]$dp.Children.Add($sp)
             $card.Child = $dp
             [void]$PanelRemoved.Children.Add($card)
@@ -1291,38 +1344,38 @@ try {
     $BtnApply.Add_Click({
         $sel = @($script:TweakBoxes | Where-Object { $_.IsChecked -eq $true -and $_.IsEnabled } | ForEach-Object { $_.Tag })
         if ($sel.Count -eq 0) {
-            Show-Info "Aucune case n'est cochée.`n`nCochez d'abord les optimisations souhaitées, ou utilisez un bouton « Suggestion »."
+            Show-Info (Tr 'Aucune case n''est cochée.\n\nCochez d''abord les optimisations souhaitées, ou utilisez un bouton « Suggestion ».')
             return
         }
-        $names = @($sel | ForEach-Object { $_.Name + $(if ($_.Reboot) { '  [redémarrage]' } elseif (-not $_.Undoable) { '  [définitif]' } else { '' }) })
-        $msg = "Vous allez modifier {0} réglage(s) de Windows :`n`n{1}`n`n" -f $sel.Count, (Format-Bullets $names)
-        if ($ChkRestore.IsChecked) { $msg += "Un point de restauration Windows sera créé avant.`n" }
-        $msg += "Vos réglages d'origine seront sauvegardés (onglet « Restaurer »).`n`nConfirmez-vous ces modifications ?"
-        if (-not (Confirm-Action $msg)) { Write-Log 'Modifications annulées : non confirmées.'; return }
+        $names = @($sel | ForEach-Object { (Tr $_.Name) + $(if ($_.Reboot) { Tr '  [redémarrage]' } elseif (-not $_.Undoable) { Tr '  [définitif]' } else { '' }) })
+        $msg = (Tr 'Vous allez modifier {0} réglage(s) de Windows :\n\n{1}\n\n') -f $sel.Count, (Format-Bullets $names)
+        if ($ChkRestore.IsChecked) { $msg += (Tr 'Un point de restauration Windows sera créé avant.\n') }
+        $msg += (Tr 'Vos réglages d''origine seront sauvegardés (onglet « Restaurer »).\n\nConfirmez-vous ces modifications ?')
+        if (-not (Confirm-Action $msg)) { Write-Log (Tr 'Modifications annulées : non confirmées.'); return }
 
         if ($ChkRestore.IsChecked) {
             if (-not (New-RestorePointUI)) {
-                if (-not (Confirm-Action "Le point de restauration n'a pas été créé.`n`nContinuer quand même ?`nVos réglages d'origine restent sauvegardés par l'application et peuvent être restaurés." 'Warning')) {
-                    Write-Log 'Modifications annulées : pas de point de restauration.'
+                if (-not (Confirm-Action (Tr 'Le point de restauration n''a pas été créé.\n\nContinuer quand même ?\nVos réglages d''origine restent sauvegardés par l''application et peuvent être restaurés.') 'Warning')) {
+                    Write-Log (Tr 'Modifications annulées : pas de point de restauration.')
                     return
                 }
             }
         }
 
-        Show-Busy 'Application des réglages...'
+        Show-Busy (Tr 'Application des réglages...')
         $okCount = 0; $errors = @(); $needReboot = $false
         try {
             foreach ($t in $sel) {
-                $TxtBusy.Text = 'Application : ' + $t.Name
+                $TxtBusy.Text = (Tr 'Application : ') + (Tr $t.Name)
                 Invoke-UIPump
                 try {
                     Invoke-Tweak $t
                     $okCount++
                     if ($t.Reboot) { $needReboot = $true }
-                    Write-Log ('Appliqué : ' + $t.Name)
+                    Write-Log ((Tr 'Appliqué : ') + (Tr $t.Name))
                 } catch {
-                    $errors += ($t.Name + ' : ' + $_.Exception.Message)
-                    Write-Log ('ERREUR : ' + $t.Name + ' : ' + $_.Exception.Message)
+                    $errors += ((Tr $t.Name) + ' : ' + $_.Exception.Message)
+                    Write-Log ((Tr 'ERREUR : ') + (Tr $t.Name) + ' : ' + $_.Exception.Message)
                 }
             }
         } finally {
@@ -1330,81 +1383,81 @@ try {
             Build-TweakList; Build-UndoList
         }
 
-        $summary = '{0} réglage(s) appliqué(s) sur {1}.' -f $okCount, $sel.Count
-        if ($errors.Count) { Show-Info ($summary + "`n`nErreurs :`n" + (Format-Bullets $errors)) 'Warning' }
-        if ($needReboot) { Request-Restart ($summary + "`nCertains réglages prendront effet après un redémarrage.") }
+        $summary = (Tr '{0} réglage(s) appliqué(s) sur {1}.') -f $okCount, $sel.Count
+        if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors)) 'Warning' }
+        if ($needReboot) { Request-Restart ($summary + "`n" + (Tr 'Certains réglages prendront effet après un redémarrage.')) }
         elseif (-not $errors.Count) { Show-Info $summary }
     })
 
     $BtnAppsSuggest.Add_Click({ foreach ($cb in $script:AppBoxes) { $cb.IsChecked = [bool]$cb.Tag.Suggest }; Update-AppCount })
     $BtnAppsNone.Add_Click({ foreach ($cb in $script:AppBoxes) { $cb.IsChecked = $false }; Update-AppCount })
-    $BtnAppsRefresh.Add_Click({ Show-Busy 'Recherche des applications...'; try { Build-AppList } finally { Hide-Busy } })
+    $BtnAppsRefresh.Add_Click({ Show-Busy (Tr 'Recherche des applications...'); try { Build-AppList } finally { Hide-Busy } })
 
     $BtnRemoveApps.Add_Click({
         $sel = @($script:AppBoxes | Where-Object { $_.IsChecked -eq $true } | ForEach-Object { $_.Tag })
-        if ($sel.Count -eq 0) { Show-Info 'Aucune application n''est cochée.'; return }
-        $msg = "Vous allez désinstaller {0} application(s) pour votre compte :`n`n{1}`n`nElles pourront être réinstallées gratuitement depuis le Microsoft Store (onglet « Restaurer »).`n`nConfirmez-vous la désinstallation ?" -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { $_.Name }))
-        if (-not (Confirm-Action $msg 'Warning')) { Write-Log 'Désinstallation annulée : non confirmée.'; return }
+        if ($sel.Count -eq 0) { Show-Info (Tr 'Aucune application n''est cochée.'); return }
+        $msg = (Tr 'Vous allez désinstaller {0} application(s) pour votre compte :\n\n{1}\n\nElles pourront être réinstallées gratuitement depuis le Microsoft Store (onglet « Restaurer »).\n\nConfirmez-vous la désinstallation ?') -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { Tr $_.Name }))
+        if (-not (Confirm-Action $msg 'Warning')) { Write-Log (Tr 'Désinstallation annulée : non confirmée.'); return }
 
-        Show-Busy 'Désinstallation...'
+        Show-Busy (Tr 'Désinstallation...')
         $okCount = 0; $errors = @()
         try {
             foreach ($a in $sel) {
-                $TxtBusy.Text = 'Désinstallation : ' + $a.Name
+                $TxtBusy.Text = (Tr 'Désinstallation : ') + (Tr $a.Name)
                 Invoke-UIPump
                 try {
                     Remove-AppxPackage -Package $a.FullName -ErrorAction Stop
                     [void]$RemovedApps.Add([pscustomobject]@{ Name = $a.Name; Family = $a.Family; PkgName = $a.PkgName; Date = (Get-Date).ToString('yyyy-MM-dd HH:mm') })
                     Save-Data
                     $okCount++
-                    Write-Log ('Désinstallée : ' + $a.Name)
+                    Write-Log ((Tr 'Désinstallée : ') + (Tr $a.Name))
                 } catch {
-                    $errors += ($a.Name + ' : ' + $_.Exception.Message)
-                    Write-Log ('ERREUR : ' + $a.Name + ' : ' + $_.Exception.Message)
+                    $errors += ((Tr $a.Name) + ' : ' + $_.Exception.Message)
+                    Write-Log ((Tr 'ERREUR : ') + (Tr $a.Name) + ' : ' + $_.Exception.Message)
                 }
             }
         } finally {
             Build-AppList; Build-UndoList
             Hide-Busy
         }
-        $summary = '{0} application(s) désinstallée(s) sur {1}.' -f $okCount, $sel.Count
-        if ($errors.Count) { Show-Info ($summary + "`n`nErreurs :`n" + (Format-Bullets $errors)) 'Warning' } else { Show-Info $summary }
+        $summary = (Tr '{0} application(s) désinstallée(s) sur {1}.') -f $okCount, $sel.Count
+        if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors)) 'Warning' } else { Show-Info $summary }
     })
 
     $BtnUndoAll.Add_Click({ foreach ($cb in $script:UndoBoxes) { $cb.IsChecked = $true }; Update-UndoCount })
     $BtnUndoNone.Add_Click({ foreach ($cb in $script:UndoBoxes) { $cb.IsChecked = $false }; Update-UndoCount })
-    $BtnRstrui.Add_Click({ try { Start-Process 'rstrui.exe' } catch { Show-Info 'La Restauration du système est indisponible sur ce PC.' 'Warning' } })
+    $BtnRstrui.Add_Click({ try { Start-Process 'rstrui.exe' } catch { Show-Info (Tr 'La Restauration du système est indisponible sur ce PC.') 'Warning' } })
     $BtnLogs.Add_Click({ Start-Process 'explorer.exe' -ArgumentList "`"$DataPath`"" })
 
     $BtnUndo.Add_Click({
         $sel = @($script:UndoBoxes | Where-Object { $_.IsChecked -eq $true } | ForEach-Object { $_.Tag })
-        if ($sel.Count -eq 0) { Show-Info 'Aucun réglage n''est coché.'; return }
-        $msg = "Vous allez remettre {0} réglage(s) comme avant :`n`n{1}`n`nConfirmez-vous ?" -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { $_.Name }))
-        if (-not (Confirm-Action $msg)) { Write-Log 'Restauration annulée : non confirmée.'; return }
+        if ($sel.Count -eq 0) { Show-Info (Tr 'Aucun réglage n''est coché.'); return }
+        $msg = (Tr 'Vous allez remettre {0} réglage(s) comme avant :\n\n{1}\n\nConfirmez-vous ?') -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { Tr $_.Name }))
+        if (-not (Confirm-Action $msg)) { Write-Log (Tr 'Restauration annulée : non confirmée.'); return }
 
-        Show-Busy 'Restauration des réglages...'
+        Show-Busy (Tr 'Restauration des réglages...')
         $okCount = 0; $errors = @(); $needReboot = $false
         try {
             foreach ($e in $sel) {
-                $TxtBusy.Text = 'Restauration : ' + $e.Name
+                $TxtBusy.Text = (Tr 'Restauration : ') + (Tr $e.Name)
                 Invoke-UIPump
                 try {
                     Undo-Tweak $e
                     $okCount++
                     if ($e.Reboot) { $needReboot = $true }
-                    Write-Log ('Restauré : ' + $e.Name)
+                    Write-Log ((Tr 'Restauré : ') + (Tr $e.Name))
                 } catch {
-                    $errors += ($e.Name + ' : ' + $_.Exception.Message)
-                    Write-Log ('ERREUR restauration : ' + $e.Name + ' : ' + $_.Exception.Message)
+                    $errors += ((Tr $e.Name) + ' : ' + $_.Exception.Message)
+                    Write-Log ((Tr 'ERREUR restauration : ') + (Tr $e.Name) + ' : ' + $_.Exception.Message)
                 }
             }
         } finally {
             Hide-Busy
             Build-TweakList; Build-UndoList
         }
-        $summary = '{0} réglage(s) restauré(s) sur {1}.' -f $okCount, $sel.Count
-        if ($errors.Count) { Show-Info ($summary + "`n`nErreurs :`n" + (Format-Bullets $errors)) 'Warning' }
-        if ($needReboot) { Request-Restart ($summary + "`nCertains réglages reviendront après un redémarrage.") }
+        $summary = (Tr '{0} réglage(s) restauré(s) sur {1}.') -f $okCount, $sel.Count
+        if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors)) 'Warning' }
+        if ($needReboot) { Request-Restart ($summary + "`n" + (Tr 'Certains réglages reviendront après un redémarrage.')) }
         elseif (-not $errors.Count) { Show-Info $summary }
     })
 
@@ -1464,10 +1517,10 @@ try {
     function Update-Monitor {
         $s = $script:Sync
         if (-not $s.Ready) { return }
-        if ($null -ne $s.Cpu) { $PbCpu.Value = $s.Cpu; $TxtCpuVal.Text = "$($s.Cpu) %" } else { $TxtCpuVal.Text = 'n/d' }
+        if ($null -ne $s.Cpu) { $PbCpu.Value = $s.Cpu; $TxtCpuVal.Text = "$($s.Cpu) %" } else { $TxtCpuVal.Text = (Tr 'n/d') }
         $g = $s.Gpu
         if ($null -ne $s.GpuNv) { $g = $s.GpuNv }
-        if ($null -ne $g) { $PbGpu.Value = $g; $TxtGpuVal.Text = "$g %" } else { $TxtGpuVal.Text = 'n/d' }
+        if ($null -ne $g) { $PbGpu.Value = $g; $TxtGpuVal.Text = "$g %" } else { $TxtGpuVal.Text = (Tr 'n/d') }
         if ($null -ne $s.Ram) { $PbRam.Value = $s.Ram; $TxtRamVal.Text = "$($s.Ram) %" }
 
         $level = 0; $hasTemp = $false
@@ -1481,23 +1534,23 @@ try {
         }
         if ($null -ne $s.CpuTemp) {
             $hasTemp = $true
-            $level = [Math]::Max($level, (Set-TempText $TxtCpuTemp $s.CpuTemp 80 90 '   (capteur ACPI, approximatif)'))
+            $level = [Math]::Max($level, (Set-TempText $TxtCpuTemp $s.CpuTemp 80 90 (Tr '   (capteur ACPI, approximatif)')))
         } else {
-            $TxtCpuTemp.Text = 'Non disponible sans l''outil du fabricant'; $TxtCpuTemp.Foreground = (Br '#97A1B3')
+            $TxtCpuTemp.Text = Tr 'Non disponible sans l''outil du fabricant'; $TxtCpuTemp.Foreground = (Br '#97A1B3')
         }
 
         if ($level -ge 2) {
             $HeatBox.Background = (Br '#3A1618')
-            $TxtHeat.Text = 'Température élevée ! Vérifiez que les aérations ne sont pas bouchées, dépoussiérez le PC, limitez les images par seconde dans vos jeux et essayez la « Suggestion Anti-surchauffe ».'
+            $TxtHeat.Text = (Tr 'Température élevée ! Vérifiez que les aérations ne sont pas bouchées, dépoussiérez le PC, limitez les images par seconde dans vos jeux et essayez la « Suggestion Anti-surchauffe ».')
         } elseif ($level -eq 1) {
             $HeatBox.Background = (Br '#33290F')
-            $TxtHeat.Text = 'Température soutenue : normal pendant un jeu exigeant. Si cela dure au repos, pensez au dépoussiérage et à la « Suggestion Anti-surchauffe ».'
+            $TxtHeat.Text = (Tr 'Température soutenue : normal pendant un jeu exigeant. Si cela dure au repos, pensez au dépoussiérage et à la « Suggestion Anti-surchauffe ».')
         } elseif ($hasTemp) {
             $HeatBox.Background = (Br '#14301F')
-            $TxtHeat.Text = 'Températures normales.'
+            $TxtHeat.Text = (Tr 'Températures normales.')
         } else {
             $HeatBox.Background = (Br '#1B2130')
-            $TxtHeat.Text = 'Ce PC ne donne pas accès à ses capteurs de température à Windows. Utilisez le logiciel du fabricant de votre carte graphique ou de votre PC pour les consulter.'
+            $TxtHeat.Text = (Tr 'Ce PC ne donne pas accès à ses capteurs de température à Windows. Utilisez le logiciel du fabricant de votre carte graphique ou de votre PC pour les consulter.')
         }
     }
 
@@ -1513,16 +1566,37 @@ try {
         try { $MonPS.Dispose(); $MonRunspace.Dispose() } catch { }
     })
 
+    # ------------------------- Langue -------------------------
+    $script:LangReady = $false
+    foreach ($code in @($Languages.Keys)) {
+        $item = New-Object System.Windows.Controls.ComboBoxItem
+        $item.Content = [string]$Languages[$code]['@langue']
+        $item.Tag = $code
+        [void]$CmbLang.Items.Add($item)
+        if ($code -eq $Lang) { $CmbLang.SelectedItem = $item }
+    }
+    $script:LangReady = $true
+    $CmbLang.Add_SelectionChanged({
+        if (-not $script:LangReady -or -not $CmbLang.SelectedItem) { return }
+        $code = [string]$CmbLang.SelectedItem.Tag
+        if ($code -eq $Lang) { return }
+        # La langue choisie est mémorisée, puis l'application redémarre dans cette langue.
+        try { [pscustomobject]@{ Lang = $code } | ConvertTo-Json | Set-Content -LiteralPath $SettingsFile -Encoding UTF8 } catch { }
+        $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        Start-Process -FilePath $exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$PSCommandPath`""
+        $Window.Close()
+    })
+
     # ------------------------- Démarrage -------------------------
     $script:TxtLog = $TxtLog
-    Write-Log "$AppName $AppVersion démarré - $OsCaption $DispVer (build $Build)."
+    Write-Log ((Tr '{0} {1} démarré - {2} {3} (build {4}).') -f $AppName, $AppVersion, $OsCaption, $DispVer, $Build)
     Build-TweakList
     Build-AppList
     Build-UndoList
-    if ($Backup.Count -gt 0) { Write-Log ('{0} réglage(s) modifié(s) précédemment peuvent être restaurés (onglet « Restaurer »).' -f $Backup.Count) }
+    if ($Backup.Count -gt 0) { Write-Log ((Tr '{0} réglage(s) modifié(s) précédemment peuvent être restaurés (onglet « Restaurer »).') -f $Backup.Count) }
 
     [void]$Window.ShowDialog()
 } catch {
-    Write-Log ('Erreur inattendue : ' + $_.Exception.Message)
-    [void][System.Windows.MessageBox]::Show("Erreur inattendue :`n" + $_.Exception.Message + "`n`nJournal : $LogFile", $AppName, 'OK', 'Error')
+    Write-Log ((Tr 'Erreur inattendue :') + ' ' + $_.Exception.Message)
+    [void][System.Windows.MessageBox]::Show((Tr 'Erreur inattendue :') + "`n" + $_.Exception.Message + "`n`n" + (Tr 'Journal : ') + $LogFile, $AppName, 'OK', 'Error')
 }
