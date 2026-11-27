@@ -96,7 +96,6 @@
   "{0} réglage(s) restauré(s) sur {1}.": "{0} of {1} setting(s) restored.",
   "Certains réglages reviendront après un redémarrage.": "Some settings will come back after a restart.",
   "n/d": "n/a",
-  "   (capteur ACPI, approximatif)": "   (ACPI sensor, approximate)",
   "Non disponible sans l'outil du fabricant": "Not available without the manufacturer's tool",
   "Température élevée ! Vérifiez que les aérations ne sont pas bouchées, dépoussiérez le PC, limitez les images par seconde dans vos jeux et essayez la « Suggestion Anti-surchauffe ».": "High temperature! Check that the vents are not blocked, dust the PC, limit frames per second in your games and try the \"Anti-overheating suggestion\".",
   "Température soutenue : normal pendant un jeu exigeant. Si cela dure au repos, pensez au dépoussiérage et à la « Suggestion Anti-surchauffe ».": "Sustained temperature: normal during a demanding game. If it lasts at idle, consider dusting and the \"Anti-overheating suggestion\".",
@@ -246,7 +245,6 @@
   "Carte graphique": "Graphics card",
   "Mémoire": "Memory",
   "Température carte graphique": "Graphics card temperature",
-  "Température processeur": "Processor temperature",
   "Mesure en cours...": "Measuring...",
   "Conseils pour votre matériel": "Tips for your hardware",
   "Optimisations": "Optimizations",
@@ -285,5 +283,8 @@
   "Mentions légales": "Legal notice",
   "Application indépendante, gratuite et open source (licence MIT), fournie sans garantie. Elle n'est ni affiliée, ni approuvée, ni sponsorisée par Microsoft, NVIDIA, Intel ou AMD.": "Independent, free and open-source application (MIT license), provided without warranty. It is not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, Intel or AMD.",
   "Windows, Xbox et Microsoft Store sont des marques de Microsoft Corporation. NVIDIA, GeForce, RTX, DLSS, G-SYNC et ShadowPlay sont des marques de NVIDIA Corporation. Intel, Arc et Turbo Boost sont des marques d'Intel Corporation. AMD, Radeon, Ryzen, FreeSync et Precision Boost sont des marques d'Advanced Micro Devices, Inc. Ces noms sont cités uniquement pour indiquer la compatibilité.": "Windows, Xbox and Microsoft Store are trademarks of Microsoft Corporation. NVIDIA, GeForce, RTX, DLSS, G-SYNC and ShadowPlay are trademarks of NVIDIA Corporation. Intel, Arc and Turbo Boost are trademarks of Intel Corporation. AMD, Radeon, Ryzen, FreeSync and Precision Boost are trademarks of Advanced Micro Devices, Inc. These names are mentioned only to indicate compatibility.",
-  "Journal": "Log"
+  "Journal": "Log",
+  "Capteur thermique (ACPI)": "Thermal sensor (ACPI)",
+  "   (souvent la carte mère, pas le processeur)": "   (often the motherboard, not the processor)",
+  "Processeur Intel Core de 13e/14e génération (PC de bureau) détecté : Intel a publié des mises à jour du microcode qui corrigent un problème d'instabilité de ces processeurs. Installez le dernier BIOS du fabricant de votre carte mère (avec le microcode 0x12B ou plus récent) et gardez les réglages Intel par défaut (« Intel Default Settings »).": "Intel Core 13th/14th generation desktop processor detected: Intel has released microcode updates that fix an instability issue affecting these processors. Install the latest BIOS from your motherboard manufacturer (with microcode 0x12B or newer) and keep Intel's default settings (\"Intel Default Settings\")."
 }

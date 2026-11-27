@@ -55,6 +55,27 @@ Check 'Set-KVString' {
 }
 Check 'Mode d''alimentation lisible' { [bool](Get-ActiveScheme) }
 Check 'Réglage processeur lisible' { $null -ne (Get-PowerSetting (Get-ActiveScheme) 'SUB_PROCESSOR' 'PROCTHROTTLEMAX') }
+Check 'Reconnaissance des applications' {
+    $cases = @{
+        'Facebook.InstagramBeta' = 'Instagram - sponsorisé'; 'Facebook.Facebook' = 'Facebook - sponsorisé'
+        'Microsoft.WindowsFeedbackHub' = 'Hub de commentaires'; 'king.com.CandyCrushSaga' = 'Jeux King (Candy Crush...) - sponsorisé'
+        'Microsoft.WindowsCalculator' = $null; 'Microsoft.GamingApp' = $null; 'Microsoft.XboxGamingOverlay' = $null
+        'Microsoft.WindowsStore' = $null; 'Microsoft.Paint' = $null; 'MSTeams' = $null
+    }
+    foreach ($k in $cases.Keys) {
+        $e = Get-CatalogEntry $k
+        $got = if ($e) { $e.N } else { $null }
+        if ($got -ne $cases[$k]) { throw "$k -> « $got » au lieu de « $($cases[$k]) »" }
+    }
+    $true
+}
+Check 'Détection Intel Core 13e/14e génération (bureau)' {
+    $yes = 'Intel(R) Core(TM) i5-14600K', 'Intel(R) Core(TM) i9-13900KS', 'Intel(R) Core(TM) i7-13700', 'Intel(R) Core(TM) i7-14700KF', 'Intel(R) Core(TM) i5-13600KF'
+    $no  = 'Intel(R) Core(TM) i7-13700H', 'Intel(R) Core(TM) i9-14900HX', 'Intel(R) Core(TM) i5-12600K', 'Intel(R) Core(TM) i7-1355U', 'Intel(R) Core(TM) Ultra 7 265K', 'AMD Ryzen 7 7800X3D 8-Core Processor', 'Intel(R) Core(TM) i5-13400T'
+    foreach ($n in $yes) { if (-not (Test-IntelRaptorDesktop $n)) { throw "non détecté : $n" } }
+    foreach ($n in $no)  { if (Test-IntelRaptorDesktop $n) { throw "détecté à tort : $n" } }
+    $true
+}
 Check 'Liste des applications' { $a = @(Get-BloatApps); Write-Host "         $($a.Count) application(s) trouvée(s)"; $true }
 
 # 3. Interface ---------------------------------------------------------------------------------
@@ -102,7 +123,11 @@ foreach ($code in @($Languages.Keys | Where-Object { $_ -ne 'fr' })) {
         $x = [xml]$XamlText
         Convert-XamlLanguage $x
         $w = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $x))
-        $ok = $null -ne $w.FindName('CmbLang')
+        $cmb = $w.FindName('CmbLang')
+        $ok = $null -ne $cmb
+        # Les modèles sombres (liste déroulante, barres de défilement) doivent se construire sans erreur
+        $w.Measure([System.Windows.Size]::new(1200, 800)); $w.Arrange([System.Windows.Rect]::new(0, 0, 1200, 800)); $w.UpdateLayout()
+        if ($cmb.ApplyTemplate() -or $cmb.Template) { $ok = $ok -and ($null -ne $cmb.Template.FindName('PART_Popup', $cmb)) }
         $Lang = 'fr'; $Dict = $Languages['fr']
         $ok
     }
