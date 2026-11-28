@@ -10,8 +10,8 @@
 <style>
   /* OLED: pure #000 everywhere except the lit elements */
   :root {
-    --red: #e5372c;   /* sampled from the reference photo */
-    --gloss: linear-gradient(#e5372c, #e5372c);
+    --red: #ff1f1f;   /* vivid red */
+    --gloss: linear-gradient(#ff1f1f, #ff1f1f);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
@@ -42,10 +42,10 @@
   .divider {
     width: 46vmin; height: .35vmin; margin: 2.2vmin 0 3vmin;
     background: linear-gradient(90deg, transparent, var(--red), transparent);
-    box-shadow: 0 0 1.5vmin rgba(229,55,44,.55);
+    box-shadow: 0 0 1.5vmin rgba(255,31,31,.55);
   }
   .title { display: flex; flex-direction: column; align-items: center; text-transform: uppercase;
-           filter: drop-shadow(0 0 .8vmin rgba(229,55,44,.55)); }
+           filter: drop-shadow(0 0 .8vmin rgba(255,31,31,.55)); }
   .word {
     display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em;
     background-image: linear-gradient(105deg, transparent 44%, rgba(255,230,230,.9) 50%, transparent 56%), var(--gloss);
@@ -68,7 +68,7 @@
 
   #fx { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: screen; pointer-events: none; }
   #flash { position: absolute; inset: 0; opacity: 0; pointer-events: none;
-           background: radial-gradient(circle at 50% 50%, #fff 0%, #ff6a5a 18%, rgba(229,55,44,.6) 40%, rgba(0,0,0,0) 75%); }
+           background: radial-gradient(circle at 50% 50%, #fff 0%, #ff6a5a 18%, rgba(255,31,31,.6) 40%, rgba(0,0,0,0) 75%); }
   #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 </style>
 </head>
@@ -132,7 +132,7 @@ const cv = $('#fx'), ctx = cv.getContext('2d');
 // ---------- per-frame scene ----------
 function render(t) {
   const g = .5 + .5 * Math.sin(t * Math.PI * 2 / 4);
-  const glow = (k = 1) => `drop-shadow(0 0 ${(1 + .6 * g) * vm * k}px rgba(229,55,44,${.5 + .2 * g})) drop-shadow(0 0 ${(4 + 3 * g) * vm * k}px rgba(160,0,15,${.35 + .15 * g}))`;
+  const glow = (k = 1) => `drop-shadow(0 0 ${(1 + .6 * g) * vm * k}px rgba(255,31,31,${.5 + .2 * g})) drop-shadow(0 0 ${(4 + 3 * g) * vm * k}px rgba(160,0,15,${.35 + .15 * g}))`;
 
   // intro (shared by all three)
   const ls = oCubic(prog(t, 0, 1));
@@ -260,7 +260,7 @@ function drawFx(t) {
     for (const l of lines) {
       const x = W + l.len - (((t - 6.9) * l.sp * vm + l.off * W) % (W + 2 * l.len));
       const gr = ctx.createLinearGradient(x, 0, x + l.len, 0);
-      gr.addColorStop(0, `rgba(255,140,140,${.9 * env * l.a})`); gr.addColorStop(1, 'rgba(229,55,44,0)');
+      gr.addColorStop(0, `rgba(255,140,140,${.9 * env * l.a})`); gr.addColorStop(1, 'rgba(255,31,31,0)');
       ctx.strokeStyle = gr; ctx.lineWidth = l.w; ctx.beginPath(); ctx.moveTo(x, l.y); ctx.lineTo(x + l.len, l.y); ctx.stroke();
     }
   }
@@ -321,7 +321,7 @@ function ring(x, y, dt, dur, maxR, width) {
 }
 function flare(x, y, r, a) {
   const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-  gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.25, `rgba(255,90,90,${.7 * a})`); gr.addColorStop(1, 'rgba(229,55,44,0)');
+  gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.25, `rgba(255,90,90,${.7 * a})`); gr.addColorStop(1, 'rgba(255,31,31,0)');
   ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
 }
 
@@ -362,7 +362,7 @@ function setup() {
     const sh = R();
     parts.push({ x, y, vx: Math.cos(ang) * sp * (hot ? 1.5 : 1), vy: Math.sin(ang) * sp * (hot ? 1.5 : 1) - 8 * vm,
       k: 1.4 + R() * 1.6, gy: (5 + R() * 10) * vm, life: 1.1 + R() * 2.2, sz: step * (.7 + R() * .7), zg: R() < .12 ? .4 + R() * .8 : 0, hot,
-      r: sh < .15 ? 255 : sh < .35 ? 245 : 229, g: sh < .15 ? 160 : sh < .35 ? 95 : 55, b: sh < .15 ? 120 : sh < .35 ? 80 : 44 });
+      r: 255, g: sh < .15 ? 170 : sh < .35 ? 90 : 31, b: sh < .15 ? 150 : sh < .35 ? 85 : 31 });
   }
   const E = rng(77); embers = [];
   for (let i = 0; i < 140; i++) embers.push({ x: E() * W, ph: E(), sp: 3 + E() * 7, f: .5 + E() * 1.2, r: (.12 + E() * .3) * vm, h: E() });
