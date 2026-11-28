@@ -6,16 +6,16 @@
 <title>ROG Finale</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&display=block" rel="stylesheet">
 <style>
   /* OLED: pure #000 everywhere except the lit elements */
   :root {
-    --red: #de272c;
-    --gloss: linear-gradient(180deg, #f2565b 0%, #de272c 22%, #de272c 48%, #b81d22 56%, #de272c 66%, #de272c 88%, #ea4045 100%);
+    --red: #e5372c;   /* sampled from the reference photo */
+    --gloss: linear-gradient(#e5372c, #e5372c);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-  body { font-family: "Audiowide", "Arial Black", Impact, sans-serif; cursor: none; }
+  body { font-family: "Orbitron", "Arial Black", Impact, sans-serif; font-weight: 800; cursor: none; }
 
   #stage { position: fixed; inset: 0; background: #000; perspective: 150vmin; perspective-origin: 50% 50%; overflow: hidden; }
   #aura {
@@ -31,8 +31,8 @@
     -webkit-background-clip: text; background-clip: text;
     color: transparent; -webkit-text-fill-color: transparent;
   }
-  .logo { position: relative; font-size: 24vmin; line-height: 1; letter-spacing: .06em; padding-left: .06em; }
-  .logo .fill, .logo .shine { display: block; transform: skewX(-12deg); }
+  .logo { position: relative; font-weight: 900; font-size: 22vmin; line-height: 1; letter-spacing: .06em; padding-left: .06em; }
+  .logo .fill, .logo .shine { display: block; }
   .logo .fill { background-image: var(--gloss); }
   .shine {
     position: absolute; inset: 0; padding-left: .06em;
@@ -42,31 +42,33 @@
   .divider {
     width: 46vmin; height: .35vmin; margin: 2.2vmin 0 3vmin;
     background: linear-gradient(90deg, transparent, var(--red), transparent);
-    box-shadow: 0 0 1.5vmin rgba(222,39,44,.55);
+    box-shadow: 0 0 1.5vmin rgba(229,55,44,.55);
   }
   .title { display: flex; flex-direction: column; align-items: center; text-transform: uppercase;
-           transform: skewX(-12deg); filter: drop-shadow(0 0 .8vmin rgba(222,39,44,.55)); }
+           filter: drop-shadow(0 0 .8vmin rgba(229,55,44,.55)); }
   .word {
     display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em;
     background-image: linear-gradient(105deg, transparent 44%, rgba(255,230,230,.9) 50%, transparent 56%), var(--gloss);
     background-size: 300% 100%, 100% 100%; background-repeat: no-repeat;
   }
-  .game, .republic { font-size: 8vmin; }
+  .game, .republic { font-size: 7vmin; }
   .of { font-size: 4.6vmin; letter-spacing: .4em; padding-left: .4em; margin: .6vmin 0; }
 
-  /* final logo: stacked layers give it real 3D depth when the camera turns */
+  /* final logo: the eye from the reference photo; stacked layers give it depth when the camera turns */
   #end { display: grid; place-items: center; }
-  #end .layer { grid-area: 1 / 1; font-size: 34vmin; line-height: 1; letter-spacing: .06em; padding: 14vmin 18vmin 14vmin calc(18vmin + .06em); }
-  #end .layer span { display: block; transform: skewX(-12deg); }
-  #end .back span { color: var(--c); }
-  #end .front .fill { background-image: var(--gloss); }
-  #end .front .inner { position: relative; }
-  #end .ghost span { color: var(--c); }
-  #end img { display: block; height: 40vmin; width: auto; }
+  #end .layer { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; padding: 12vmin 16vmin; }
+  #end .eye { display: block; width: 72vmin; height: auto; transform-origin: 50% 62%; }
+  #end .eyebox { position: relative; }
+  #end .eshine { position: absolute; inset: 0; transform-origin: 50% 62%;
+    -webkit-mask: var(--logo) center / 100% 100% no-repeat; mask: var(--logo) center / 100% 100% no-repeat;
+    background-image: linear-gradient(105deg, transparent 42%, rgba(255,140,130,.55) 47%, rgba(255,240,235,.95) 50%, rgba(255,140,130,.55) 53%, transparent 58%);
+    background-size: 300% 100%; background-repeat: no-repeat; }
+  #end .sub { margin-top: 6.5vmin; font-size: 3.7vmin; line-height: 1.3; letter-spacing: .05em; text-align: center; color: var(--red); text-transform: uppercase; }
+  #end .back .sub, #end .ghost .sub { visibility: hidden; }
 
   #fx { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: screen; pointer-events: none; }
   #flash { position: absolute; inset: 0; opacity: 0; pointer-events: none;
-           background: radial-gradient(circle at 50% 50%, #fff 0%, #ff6a5a 18%, rgba(222,39,44,.6) 40%, rgba(0,0,0,0) 75%); }
+           background: radial-gradient(circle at 50% 50%, #fff 0%, #ff6a5a 18%, rgba(229,55,44,.6) 40%, rgba(0,0,0,0) 75%); }
   #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 </style>
 </head>
@@ -101,18 +103,15 @@ $('#top').innerHTML = CONTENT; $('#bot').innerHTML = CONTENT;
 
 // final logo layers
 (function buildEnd() {
-  const N = 16, end = $('#end'); let h = '';
-  for (let i = N; i >= 1; i--) {
-    const k = i / N, c = `rgb(${Math.round(150 - 110 * k)},${Math.round(14 - 12 * k)},${Math.round(20 - 16 * k)})`;
-    h += LOGO
-      ? `<div class="layer back" data-z="${i}"><img src="${LOGO}" style="filter:brightness(${.55 - .4 * k})"></div>`
-      : `<div class="layer back" data-z="${i}" style="--c:${c}"><span>ROG</span></div>`;
-  }
-  if (!LOGO) h += `<div class="layer ghost ga" style="--c:#ff1f45"><span>ROG</span></div><div class="layer ghost gb" style="--c:#6a0010"><span>ROG</span></div>`;
-  h += LOGO
-    ? `<div class="layer front" data-z="0"><img src="${LOGO}"></div>`
-    : `<div class="layer front" data-z="0"><div class="inner"><span class="fill gl">ROG</span><span class="shine gl" aria-hidden="true">ROG</span></div></div>`;
+  const src = LOGO || 'rog-eye.svg', N = 16, end = $('#end');
+  const sub = `<div class="sub">Game Of<br>Republic</div>`;
+  const lay = (cls, z, f, extra = '') => `<div class="layer ${cls}"${z !== null ? ` data-z="${z}"` : ''}><div class="eyebox"><img class="eye" src="${src}" style="filter:${f}">${extra}</div>${sub}</div>`;
+  let h = '';
+  for (let i = N; i >= 1; i--) h += lay('back', i, `brightness(${.62 - .45 * i / N})`);
+  h += lay('ghost ga', null, 'brightness(1.6) saturate(1.3)') + lay('ghost gb', null, 'brightness(.35)');
+  h += lay('front', 0, 'none', '<div class="eshine"></div>');
   end.innerHTML = h;
+  end.style.setProperty('--logo', `url("${src}")`);
 })();
 
 // ---------- helpers ----------
@@ -124,7 +123,7 @@ const ioCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 const oBack = x => { const c1 = 1.4, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function sweep(t, wins) { let x = 150; for (const [a, b] of wins) if (t >= a) x = 150 - 200 * prog(t, a, b); return x; }
-const TAN = Math.tan(-12 * Math.PI / 180);
+const TAN = 0;   // text is upright like the reference photo
 
 let W, H, vm, dpr, cutY = 0, center = { x: 0, y: 0 }, box = null;
 let parts = [], embers = [], lines = [], sparks = [];
@@ -133,7 +132,7 @@ const cv = $('#fx'), ctx = cv.getContext('2d');
 // ---------- per-frame scene ----------
 function render(t) {
   const g = .5 + .5 * Math.sin(t * Math.PI * 2 / 4);
-  const glow = (k = 1) => `drop-shadow(0 0 ${(1 + .6 * g) * vm * k}px rgba(222,39,44,${.5 + .2 * g})) drop-shadow(0 0 ${(4 + 3 * g) * vm * k}px rgba(160,0,15,${.35 + .15 * g}))`;
+  const glow = (k = 1) => `drop-shadow(0 0 ${(1 + .6 * g) * vm * k}px rgba(229,55,44,${.5 + .2 * g})) drop-shadow(0 0 ${(4 + 3 * g) * vm * k}px rgba(160,0,15,${.35 + .15 * g}))`;
 
   // intro (shared by all three)
   const ls = oCubic(prog(t, 0, 1));
@@ -158,6 +157,7 @@ function render(t) {
 
   // end logo state, set by each variant
   let E = { o: 0, s: 1, rx: 0, ry: 0, x: 0, y: 0, blur: 0, clip: null, glitch: 0 };
+  const LAND = V === 1 ? 8.55 : V === 2 ? 8.8 : 8.9;
   const hold = (t0) => { const k = prog(t, t0, t0 + 1.5); return { ry: 9 * Math.sin((t - t0) * .7) * k, rx: 4 * Math.sin((t - t0) * .5) * k }; };
 
   if (V === 1) {                                   // ---- EXPLOSION ----
@@ -190,14 +190,21 @@ function render(t) {
     top.style.filter = `brightness(${lit})`;
     const k = oExpo(prog(t, 8.0, 8.9));
     const q = rng(Math.floor(t * 30) + 3);
-    const gl = (t > 8.85 && t < 9.25) || (t > 11.2 && t < 11.4) ? 1 : 0;
+    const gl = (t > 8.85 && t < 9.25) || (t > 10.1 && t < 10.3) ? 1 : 0;
     const h = hold(9.5);
     E = { ...E, o: t >= 8.0 ? 1 : 0, clip: k >= 1 ? null : `inset(${50 * (1 - k)}% 0% ${50 * (1 - k)}% 0%)`, glitch: gl, x: gl && q() > .35 ? (q() - .5) * 3 * vm : 0, ...h };
     flash.style.opacity = t > 8.0 ? Math.pow(1 - prog(t, 8.0, 8.6), 2) * .45 : 0;
   }
 
   // apply end logo
-  end.style.transform = `translate3d(${E.x}px,${E.y}px,0) rotateX(${E.rx}deg) rotateY(${E.ry}deg) scale(${E.s})`;
+  // the wink: the eye closes, stays shut a beat, then snaps open with a sparkle
+  const wc = oCubic(prog(t, 11.0, 11.14)), wo = oBack(prog(t, 11.24, 11.5));
+  const wink = t < 11.24 ? 1 - .94 * wc : .06 + .94 * wo;
+  const tilt = -6 * Math.sin(Math.PI * prog(t, 10.9, 11.8));
+  end.style.transform = `translate3d(${E.x}px,${E.y}px,0) rotateX(${E.rx}deg) rotateY(${E.ry}deg) rotateZ(${tilt}deg) scale(${E.s})`;
+  $$('#end .eye, #end .eshine').forEach(e => e.style.transform = `scaleY(${wink})`);
+  const su = oCubic(prog(t, LAND + .4, LAND + 1.2)), so = $('#end .front .sub');
+  so.style.opacity = su; so.style.transform = `translateY(${(1 - su) * 2 * vm}px)`;
   const qg = rng(Math.floor(t * 30) + 11);
   $$('#end .layer').forEach(l => {
     if (l.classList.contains('ghost')) {
@@ -212,8 +219,7 @@ function render(t) {
     l.style.clipPath = E.clip || 'none';
     if (z === 0) l.style.filter = `${E.blur > .5 ? `blur(${E.blur}px) ` : ''}${glow(1.3)}`;
   });
-  const es = $('#end .front .shine');
-  if (es) es.style.backgroundPosition = `${sweep(t, V === 1 ? [[9.3, 10.5], [11.6, 12.8]] : V === 2 ? [[8.6, 9.8], [11.4, 12.6]] : [[9.4, 10.6], [11.7, 12.9]])}% 0`;
+  $('#end .eshine').style.backgroundPosition = `${sweep(t, [[LAND + .6, LAND + 1.8], [12.0, 12.9]])}% 0`;
 
   $('#fade').style.opacity = ioCubic(prog(t, 13, 14));
   drawFx(t);
@@ -254,7 +260,7 @@ function drawFx(t) {
     for (const l of lines) {
       const x = W + l.len - (((t - 6.9) * l.sp * vm + l.off * W) % (W + 2 * l.len));
       const gr = ctx.createLinearGradient(x, 0, x + l.len, 0);
-      gr.addColorStop(0, `rgba(255,140,140,${.9 * env * l.a})`); gr.addColorStop(1, 'rgba(222,39,44,0)');
+      gr.addColorStop(0, `rgba(255,140,140,${.9 * env * l.a})`); gr.addColorStop(1, 'rgba(229,55,44,0)');
       ctx.strokeStyle = gr; ctx.lineWidth = l.w; ctx.beginPath(); ctx.moveTo(x, l.y); ctx.lineTo(x + l.len, l.y); ctx.stroke();
     }
   }
@@ -277,6 +283,20 @@ function drawFx(t) {
       ctx.strokeStyle = `rgba(255,${200 - 120 * dt / s.life | 0},${150 - 110 * dt / s.life | 0},${a})`;
       ctx.lineWidth = s.w; ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x, y); ctx.stroke();
     }
+  }
+  // sparkle at the tip of the eye right after the wink
+  if (t > 11.38 && t < 12.2) {
+    const r = $('#end .front .eye').getBoundingClientRect(), p = prog(t, 11.38, 12.2), k = Math.sin(Math.PI * p) * fade;
+    const x = r.left + r.width * .965, y = r.top + r.height * .05, L = (3 + 7 * k) * vm;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(p * .9);
+    for (const [ang, len] of [[0, 1], [Math.PI / 2, 1], [Math.PI / 4, .45], [-Math.PI / 4, .45]]) {
+      ctx.save(); ctx.rotate(ang);
+      const gr = ctx.createLinearGradient(-L * len, 0, L * len, 0);
+      gr.addColorStop(0, 'rgba(255,80,70,0)'); gr.addColorStop(.5, `rgba(255,250,245,${k})`); gr.addColorStop(1, 'rgba(255,80,70,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(-L * len, 0); ctx.lineTo(0, -.22 * vm * (1 + k)); ctx.lineTo(L * len, 0); ctx.lineTo(0, .22 * vm * (1 + k)); ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore(); flare(x, y, 3.5 * vm * k, k);
   }
   // drifting embers after the finale (1 & 3)
   if (V !== 2 && t > T_EVT) {
@@ -301,7 +321,7 @@ function ring(x, y, dt, dur, maxR, width) {
 }
 function flare(x, y, r, a) {
   const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-  gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.25, `rgba(255,90,90,${.7 * a})`); gr.addColorStop(1, 'rgba(222,39,44,0)');
+  gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.25, `rgba(255,90,90,${.7 * a})`); gr.addColorStop(1, 'rgba(229,55,44,0)');
   ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
 }
 
@@ -322,7 +342,7 @@ function setup() {
   const o = oc.getContext('2d'); o.fillStyle = '#fff';
   els.forEach((el, i) => {
     const r = rs[i], cs = getComputedStyle(el), fs = parseFloat(cs.fontSize), lsp = parseFloat(cs.letterSpacing) || 0;
-    o.font = `${fs}px Audiowide`; o.letterSpacing = `${lsp}px`; o.textAlign = 'center'; o.textBaseline = 'alphabetic';
+    o.font = `${cs.fontWeight} ${fs}px ${cs.fontFamily}`; o.letterSpacing = `${lsp}px`; o.textAlign = 'center'; o.textBaseline = 'alphabetic';
     const m = o.measureText(el.textContent.toUpperCase()), A = m.fontBoundingBoxAscent, D = m.fontBoundingBoxDescent;
     const lh = el.offsetHeight, cy = r.top + lh / 2;
     o.save(); o.translate(r.left + r.width / 2, cy); o.transform(1, 0, TAN, 1, 0, 0);
@@ -342,7 +362,7 @@ function setup() {
     const sh = R();
     parts.push({ x, y, vx: Math.cos(ang) * sp * (hot ? 1.5 : 1), vy: Math.sin(ang) * sp * (hot ? 1.5 : 1) - 8 * vm,
       k: 1.4 + R() * 1.6, gy: (5 + R() * 10) * vm, life: 1.1 + R() * 2.2, sz: step * (.7 + R() * .7), zg: R() < .12 ? .4 + R() * .8 : 0, hot,
-      r: sh < .15 ? 255 : sh < .35 ? 242 : 222, g: sh < .15 ? 150 : sh < .35 ? 86 : 39, b: sh < .15 ? 120 : sh < .35 ? 91 : 44 });
+      r: sh < .15 ? 255 : sh < .35 ? 245 : 229, g: sh < .15 ? 160 : sh < .35 ? 95 : 55, b: sh < .15 ? 120 : sh < .35 ? 80 : 44 });
   }
   const E = rng(77); embers = [];
   for (let i = 0; i < 140; i++) embers.push({ x: E() * W, ph: E(), sp: 3 + E() * 7, f: .5 + E() * 1.2, r: (.12 + E() * .3) * vm, h: E() });
