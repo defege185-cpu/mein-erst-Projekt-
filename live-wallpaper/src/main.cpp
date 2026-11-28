@@ -230,7 +230,7 @@ static bool CreateVideoWindow() {
         SetLayeredWindowAttributes(gVideo, 0, 255, LWA_ALPHA);
         SetWindowPos(gVideo, host.insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-    Log(L"video window %p in %s host %p at %ld,%ld size %ldx%ld", (void*)gVideo,
+    Log(L"video window %p in %ls host %p at %ld,%ld size %ldx%ld", (void*)gVideo,
         host.modern ? L"24H2" : L"classic", (void*)host.parent, p.x, p.y, mon.right - mon.left, mon.bottom - mon.top);
     return true;
 }
@@ -278,7 +278,7 @@ static void CreateGpuDevice() {
     if (SUCCEEDED(gDevice->QueryInterface(__uuidof(IDXGIDevice), (void**)&dd)) && SUCCEEDED(dd->GetAdapter(&ad)))
         ad->GetDesc(&desc);
     SafeRelease(ad); SafeRelease(dd);
-    Log(L"GPU decoding on: %s", desc.Description);
+    Log(L"GPU decoding on: %ls", desc.Description);
 }
 
 static void ApplyFit() {
@@ -300,7 +300,7 @@ static void ApplyFit() {
     }
     MFARGB black = {0, 0, 0, 255};
     HRESULT hr = gEngineEx->UpdateVideoStream(&src, &dst, &black);
-    Log(L"video %lux%lu -> %s (0x%08lx)", vw, vh, S.fill ? L"fill" : L"fit", (unsigned long)hr);
+    Log(L"video %lux%lu -> %ls (0x%08lx)", vw, vh, S.fill ? L"fill" : L"fit", (unsigned long)hr);
 }
 
 static void StopEngine() {
@@ -345,7 +345,7 @@ static bool StartEngine(bool useGpu) {
     BSTR b = SysAllocString(url);
     hr = gEngine->SetSource(b);
     SysFreeString(b);
-    Log(L"source %s (0x%08lx)", S.video.c_str(), (unsigned long)hr);
+    Log(L"source %ls (0x%08lx)", S.video.c_str(), (unsigned long)hr);
     return SUCCEEDED(hr);
 }
 
@@ -356,7 +356,7 @@ static void UpdateTray(DWORD op) {
     n.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     n.uCallbackMessage = WM_TRAY;
     n.hIcon = gIcon;
-    swprintf(n.szTip, ARRAYSIZE(n.szTip), L"%s – %s", APP_NAME, gPlaying ? T->running : T->paused);
+    swprintf(n.szTip, ARRAYSIZE(n.szTip), L"%ls – %ls", APP_NAME, gPlaying ? T->running : T->paused);
     Shell_NotifyIconW(op, &n);
 }
 static void RemoveTray() {
@@ -405,7 +405,7 @@ static void UpdatePlayback() {
         gEngine->Pause();
         SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);   // give RAM back while paused
     }
-    Log(want ? L"play" : L"pause: %s", why);
+    Log(want ? L"play" : L"pause: %ls", why);
     UpdateTray(NIM_MODIFY);
 }
 
@@ -413,7 +413,7 @@ static void UpdatePlayback() {
 static bool ChooseVideo(HWND owner) {
     wchar_t file[MAX_PATH * 2] = {};
     wchar_t filter[256];
-    swprintf(filter, ARRAYSIZE(filter), L"%s (*.mp4;*.mkv;*.mov;*.m4v;*.wmv;*.avi)%c*.mp4;*.mkv;*.mov;*.m4v;*.wmv;*.avi%c%c",
+    swprintf(filter, ARRAYSIZE(filter), L"%ls (*.mp4;*.mkv;*.mov;*.m4v;*.wmv;*.avi)%c*.mp4;*.mkv;*.mov;*.m4v;*.wmv;*.avi%c%c",
              T->videos, 0, 0, 0);
     OPENFILENAMEW of = {sizeof of};
     of.hwndOwner = owner;
@@ -489,7 +489,7 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ENGINE: {
         DWORD ev = (DWORD)w;
         if (ev == MF_MEDIA_ENGINE_EVENT_LOADEDMETADATA) { ApplyFit(); gPlaying = false; UpdatePlayback(); }
-        else if (ev == MF_MEDIA_ENGINE_EVENT_PLAYING) Log(L"playing (%s decoding)", gGpu ? L"GPU" : L"software");
+        else if (ev == MF_MEDIA_ENGINE_EVENT_PLAYING) Log(L"playing (%ls decoding)", gGpu ? L"GPU" : L"software");
         else if (ev == MF_MEDIA_ENGINE_EVENT_ERROR) {
             Log(L"playback error %u (0x%08lx)", (unsigned)((UINT64)l >> 32), (unsigned long)(l & 0xFFFFFFFF));
             if (gGpu && gFailures++ == 0) { StartEngine(false); }      // retry once without the GPU
@@ -503,7 +503,7 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         else if (w == TIMER_TEST) {
             double t = gEngine ? gEngine->GetCurrentTime() : -1;
             DWORD vw = 0, vh = 0; if (gEngine) gEngine->GetNativeVideoSize(&vw, &vh);
-            Log(L"TEST position %.2f s, video %lux%lu, decoding %s, window %s", t, vw, vh,
+            Log(L"TEST position %.2f s, video %lux%lu, decoding %ls, window %ls", t, vw, vh,
                 gGpu ? L"GPU" : L"software", gVideo && IsWindow(gVideo) ? L"ok" : L"missing");
             PostQuitMessage(t > 0.5 && gVideo ? 0 : 2);
         }
@@ -564,7 +564,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     LoadSettings();
     ParseArgs();
     DeleteFileW(gLogPath.c_str());
-    Log(L"Live Wallpaper start (%s)", gTest ? L"self-test" : L"normal");
+    Log(L"Live Wallpaper start (%ls)", gTest ? L"self-test" : L"normal");
 
     HANDLE single = CreateMutexW(nullptr, TRUE, L"LiveWallpaper.SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS && !gTest) return 0;

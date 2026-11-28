@@ -52,6 +52,7 @@ jobs:
             Write-Host ("{0}: screen {1}x{2}, red pixels {3:N2} %" -f $name, $b.Width, $b.Height, (100.0 * $red / $n))
             if (-not $p.WaitForExit(40000)) { $p.Kill(); Write-Host "::error::$name did not exit"; $failed = $true }
             Get-Content $log
+            if (-not (Select-String -Path $log -Pattern 'window ok' -Quiet)) { Write-Host "::error::$name log text is garbled"; $failed = $true }
             if ($p.ExitCode -ne 0) { Write-Host "::error::$name self-test failed (exit $($p.ExitCode))"; $failed = $true }
           }
           if ($failed) { exit 1 }
