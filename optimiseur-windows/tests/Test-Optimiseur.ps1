@@ -181,6 +181,34 @@ Check 'winget : lecture du tableau (français) et absence de mises à jour' {
     $none = ConvertFrom-WingetTable @('No installed package found matching input criteria.')
     $null -eq $none
 }
+# Cas réel signalé : réponse allemande avec 3 mises à jour (LocalSend, Teams, OpenCode)
+function Row2($a, $b, $c, $d, $e) { '{0,-26}{1,-27}{2,-21}{3,-20}{4}' -f $a, $b, $c, $d, $e }
+$DeTable = @("   - `r   \ `r", (Row2 'Name' 'ID' 'Version' 'Verfügbar' 'Quelle'), ('-' * 100),
+             (Row2 'LocalSend' 'LocalSend.LocalSend' '1.18.2' '1.19.0' 'winget'),
+             (Row2 'Microsoft Teams' 'Microsoft.Teams' '26288.2004.5269.3420' '26304.1207.5384.858' 'winget'),
+             (Row2 'OpenCode' 'Anomaly.OpenCode.Desktop' '2.3.2' '2.4.1' 'winget'),
+             '3 Aktualisierungen verfügbar.',
+             'Mindestens 1 Paket verfügt über Versionsnummern, die nicht ermittelt werden können.')
+function Test-DeTable($r) {
+    if (@($r).Count -ne 3) { throw "$(@($r).Count) ligne(s) au lieu de 3" }
+    if ($r[0].Id -ne 'LocalSend.LocalSend' -or $r[0].Available -ne '1.19.0') { throw 'LocalSend mal lu' }
+    if ($r[1].Id -ne 'Microsoft.Teams' -or $r[1].Version -ne '26288.2004.5269.3420' -or $r[1].Available -ne '26304.1207.5384.858') { throw 'Teams mal lu' }
+    if ($r[2].Id -ne 'Anomaly.OpenCode.Desktop' -or $r[2].Available -ne '2.4.1') { throw 'OpenCode mal lu' }
+    $true
+}
+Check 'winget : réponse allemande reçue par un job (cas réel)' {
+    $job = Start-Job -ArgumentList (, $DeTable) -ScriptBlock { param($t) foreach ($l in $t) { $l } }
+    $lines = @(Receive-JobLines $job)
+    if ($lines.Count -lt 7) { throw "$($lines.Count) ligne(s) reçue(s) : les lignes ont été collées" }
+    Test-DeTable (ConvertFrom-WingetTable $lines)
+}
+Check 'winget : une seule chaîne avec retours à la ligne et codes couleur' {
+    $one = ($DeTable -join "`r`n") -replace 'LocalSend\.LocalSend', ([char]27 + '[0m' + 'LocalSend.LocalSend')
+    Test-DeTable (ConvertFrom-WingetTable @($one))
+}
+Check 'winget : tableau imbriqué (ancienne erreur)' {
+    Test-DeTable (ConvertFrom-WingetTable @(, [string[]]$DeTable))
+}
 function Facts([hashtable]$h) {
     $d = @{ Displays = @(); RamModules = 2; RamType = 34; RamMHz = 6000; RamGB = 32; IsLaptop = $false; OnBattery = $false
             SysFreePct = 60; SysFreeGB = 500; SysMedia = 'SSD'; SysHealth = 'Healthy'; Gpus = @(); UptimeDays = 1; RebootPending = $false }

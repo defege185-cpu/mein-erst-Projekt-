@@ -895,8 +895,27 @@ function Get-WingetPath {
 
 # Lit le tableau affiché par « winget upgrade » (colonnes Nom, Id, Version, Disponible, Source, quelle que soit la langue).
 # Renvoie $null s'il n'y a pas de tableau (aucune mise à jour ou message d'erreur).
-function ConvertFrom-WingetTable([string[]]$Lines) {
-    $lines = @($Lines | ForEach-Object { ([string]$_ -split "`r")[-1] })
+# Récupère la sortie d'un job terminé, une ligne par élément (jamais un tableau imbriqué).
+function Receive-JobLines($Job) {
+    $out = @(Receive-Job -Job $Job -Wait -ErrorAction SilentlyContinue)
+    Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+    return @(Split-OutputLines $out)
+}
+
+# Découpe une sortie de commande en lignes : retours à la ligne, animation de progression (\r)
+# et codes de couleur du terminal sont pris en compte.
+function Split-OutputLines($Output) {
+    foreach ($item in @($Output)) {
+        foreach ($part in @($item)) {
+            foreach ($l in ([string]$part -split "`n")) {
+                ($l -replace "\x1b\[[0-9;?]*[ -/]*[@-~]", '' -split "`r")[-1].TrimEnd()
+            }
+        }
+    }
+}
+
+function ConvertFrom-WingetTable($Lines) {
+    $lines = @(Split-OutputLines $Lines)
     $sep = -1
     for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*-{10,}\s*$') { $sep = $i; break } }
     if ($sep -lt 1) { return $null }
@@ -1627,9 +1646,8 @@ try {
     # ------------------------- Point de restauration -------------------------
     function Wait-JobUI($Job, [switch]$All) {
         while ($Job.State -eq 'Running' -or $Job.State -eq 'NotStarted') { Invoke-UIPump; Start-Sleep -Milliseconds 120 }
-        $out = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue)
-        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
-        if ($All) { return , ([string[]]$out) }
+        $out = @(Receive-JobLines $Job)
+        if ($All) { return $out }
         if ($out.Count) { return [string]$out[-1] }
         return (Tr 'ERREUR : aucune réponse')
     }
@@ -1898,9 +1916,11 @@ try {
                 & $wg upgrade --accept-source-agreements 2>&1 | ForEach-Object { [string]$_ }
             }
             $out = @(Wait-JobUI $job -All)
+            try { $out | Set-Content -LiteralPath (Join-Path $DataPath 'winget-derniere-recherche.txt') -Encoding UTF8 } catch { }
             $list = ConvertFrom-WingetTable $out
             if ($null -eq $list) {
-                $last = @($out | ForEach-Object { ([string]$_ -split "`r")[-1].Trim() } | Where-Object { $_ -match '\w{3}' }) | Select-Object -Last 1
+                $last = [string](@(Split-OutputLines $out | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\w{3}' }) | Select-Object -Last 1)
+                if ($last.Length -gt 200) { $last = $last.Substring(0, 197) + '...' }
                 $script:WgList = @()
                 Show-WgMessage ((Tr 'Aucune mise à jour trouvée. Message de winget : {0}') -f $last) '#5BD48A'
                 Write-Log ((Tr 'winget : ') + $last)
