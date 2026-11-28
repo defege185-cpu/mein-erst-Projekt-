@@ -1592,9 +1592,16 @@ try {
     if ($smart.Count) { Write-Log ((Tr 'Analyse du PC : {0} conseil(s) personnalisé(s).') -f $smart.Count) }
     foreach ($tip in $tips) { [void]$PanelTips.Children.Add((New-Text ('•  ' + $tip) '#C3CAD6' 13 -Margin (Th 0 0 0 6))) }
 
-    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') 'https://www.nvidia.com/fr-fr/software/nvidia-app/')) }
-    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes AMD (site officiel)') 'https://www.amd.com/fr/support/download/drivers.html')) }
-    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes Intel (site officiel)') 'https://www.intel.fr/content/www/fr/fr/support/detect.html')) }
+    # Pages officielles des fabricants dans la langue choisie
+    $Urls = @{
+        fr = @{ Nv = 'https://www.nvidia.com/fr-fr/software/nvidia-app/'; Amd = 'https://www.amd.com/fr/support/download/drivers.html'; Intel = 'https://www.intel.fr/content/www/fr/fr/support/detect.html' }
+        de = @{ Nv = 'https://www.nvidia.com/de-de/software/nvidia-app/'; Amd = 'https://www.amd.com/de/support/download/drivers.html'; Intel = 'https://www.intel.de/content/www/de/de/support/detect.html' }
+        en = @{ Nv = 'https://www.nvidia.com/en-us/software/nvidia-app/'; Amd = 'https://www.amd.com/en/support/download/drivers.html'; Intel = 'https://www.intel.com/content/www/us/en/support/detect.html' }
+    }
+    $U = $Urls[$Lang]; if (-not $U) { $U = $Urls['en'] }
+    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') $U.Nv)) }
+    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes AMD (site officiel)') $U.Amd)) }
+    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes Intel (site officiel)') $U.Intel)) }
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Windows Update') 'ms-settings:windowsupdate'))
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Applications au démarrage') 'ms-settings:startupapps'))
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Stockage') 'ms-settings:storagesense'))
