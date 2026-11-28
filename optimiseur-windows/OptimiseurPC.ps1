@@ -925,7 +925,8 @@ function Split-OutputLines($Output) {
     foreach ($item in @($Output)) {
         foreach ($part in @($item)) {
             foreach ($l in ([string]$part -split "`n")) {
-                ($l -replace "\x1b\[[0-9;?]*[ -/]*[@-~]", '' -split "`r")[-1].TrimEnd()
+                # fin de ligne Windows (CR LF) retirée d'abord ; un CR restant au milieu = animation écrasée
+                ($l.TrimEnd("`r") -replace "\x1b\[[0-9;?]*[ -/]*[@-~]", '' -split "`r")[-1].TrimEnd()
             }
         }
     }
