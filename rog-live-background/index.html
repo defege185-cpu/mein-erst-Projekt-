@@ -59,31 +59,40 @@
     width: 100%;
   }
 
+  /* glossy deep red: dark base, bright top highlight, reflective lower edge */
   .logo {
     position: relative;
     font-weight: 900;
     font-size: 26vmin; line-height: 1;
     letter-spacing: .06em; padding-left: .06em;
-    color: var(--red);
-    text-shadow: 0 0 1.2vmin var(--red-glow), 0 0 5vmin rgba(160,0,15,.4);
     animation: logo var(--loop) cubic-bezier(.2,.8,.2,1) infinite;
   }
-  /* light sweep across the letters */
-  .logo::after {
-    content: "ROG";
-    position: absolute; inset: 0; padding-left: .06em;
-    color: transparent;
-    background: linear-gradient(100deg, transparent 40%, rgba(255,60,70,.9) 50%, transparent 60%);
-    background-size: 300% 100%;
+  .logo .fill, .logo .shine {
+    display: block;
     -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+  }
+  .logo .fill {
+    background-image: var(--gloss);
+  }
+  /* moving white-red glint across the letters */
+  .logo .shine {
+    position: absolute; inset: 0; padding-left: .06em;
+    background-image: linear-gradient(105deg, transparent 42%, rgba(255,120,130,.55) 47%, rgba(255,235,235,.95) 50%, rgba(255,120,130,.55) 53%, transparent 58%);
+    background-size: 300% 100%;
     animation: sweep var(--loop) linear infinite;
   }
+  :root {
+    --gloss: linear-gradient(180deg,
+      #ff4d5c 0%, #e0102a 18%, #b0001a 40%, #6e0009 52%,
+      #8c0010 62%, #c3001c 82%, #ff3347 100%);
+  }
   @keyframes logo {
-    0%   { opacity: 0; transform: scale(1.35); filter: blur(2vmin); }
-    8%   { opacity: 1; transform: scale(1);    filter: blur(0); }
-    50%  { text-shadow: 0 0 2vmin rgba(220,0,25,.7), 0 0 8vmin rgba(180,0,20,.5); }
-    90%  { opacity: 1; transform: scale(1);    filter: blur(0); }
-    100% { opacity: 0; transform: scale(.96);  filter: blur(1vmin); }
+    0%   { opacity: 0; transform: scale(1.35); filter: blur(2vmin) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    8%   { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    50%  { filter: blur(0) drop-shadow(0 0 1.6vmin rgba(230,0,30,.7)) drop-shadow(0 0 7vmin rgba(180,0,20,.5)); }
+    90%  { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    100% { opacity: 0; transform: scale(.96);  filter: blur(1vmin) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
   }
   @keyframes sweep {
     0%, 10% { background-position: 150% 0; }
@@ -109,17 +118,31 @@
 
   .title {
     display: flex; flex-direction: column; align-items: center;
-    font-weight: 700; color: var(--red);
+    font-weight: 700;
     text-transform: uppercase;
-    text-shadow: 0 0 1vmin var(--red-glow);
+    filter: drop-shadow(0 0 .8vmin rgba(200,0,20,.55));
   }
-  .word { display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em; }
+  .word {
+    display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em;
+    background-image:
+      linear-gradient(105deg, transparent 44%, rgba(255,230,230,.9) 50%, transparent 56%),
+      var(--gloss);
+    background-size: 300% 100%, 100% 100%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+  }
   .game, .republic { font-size: 8vmin; }
   .of { font-size: 4.6vmin; letter-spacing: .4em; padding-left: .4em; margin: .6vmin 0; }
 
-  .game     { animation: from-left  var(--loop) cubic-bezier(.16,1,.3,1) infinite; }
-  .of       { animation: appear     var(--loop) ease-out infinite; }
-  .republic { animation: from-right var(--loop) cubic-bezier(.16,1,.3,1) infinite; }
+  .game     { animation: from-left  var(--loop) cubic-bezier(.16,1,.3,1) infinite, word-shine var(--loop) linear infinite; }
+  .of       { animation: appear     var(--loop) ease-out infinite, word-shine var(--loop) linear infinite; }
+  .republic { animation: from-right var(--loop) cubic-bezier(.16,1,.3,1) infinite, word-shine var(--loop) linear infinite; }
+  @keyframes word-shine {
+    0%, 40% { background-position: 150% 0, 0 0; }
+    52%     { background-position: -50% 0, 0 0; }
+    100%    { background-position: -50% 0, 0 0; }
+  }
 
   @keyframes from-left {
     0%, 12% { transform: translateX(-110vw); opacity: 0; }
@@ -151,7 +174,7 @@
   <div class="stage">
     <div class="aura"></div>
     <div class="content">
-      <div class="logo">ROG</div>
+      <div class="logo"><span class="fill">ROG</span><span class="shine" aria-hidden="true">ROG</span></div>
       <div class="divider"></div>
       <div class="title">
         <span class="word game">Game</span>
