@@ -6,18 +6,18 @@
 <title>ROG Live Background</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=block" rel="stylesheet">
 <style>
   :root {
     --bg: #000;
-    --red: #a3000f;        /* deep red */
-    --red-hi: #d4001a;     /* highlight */
-    --red-glow: rgba(200, 0, 20, .55);
+    --red: #de272c;        /* ROG red */
+    --red-hi: #de272c;
+    --red-glow: rgba(222, 39, 44, .55);
     --loop: 12s;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; background: var(--bg); overflow: hidden; }
-  body { font-family: "Orbitron", "Arial Black", Impact, sans-serif; cursor: none; }
+  body { font-family: "Audiowide", "Arial Black", Impact, sans-serif; cursor: none; }
 
   .stage {
     position: fixed; inset: 0;
@@ -62,8 +62,8 @@
   /* glossy deep red: dark base, bright top highlight, reflective lower edge */
   .logo {
     position: relative;
-    font-weight: 900;
-    font-size: 26vmin; line-height: 1;
+    font-weight: 400; font-style: normal;
+    font-size: 24vmin; line-height: 1;
     letter-spacing: .06em; padding-left: .06em;
     animation: logo var(--loop) cubic-bezier(.2,.8,.2,1) infinite;
   }
@@ -72,6 +72,7 @@
     -webkit-background-clip: text; background-clip: text;
     color: transparent; -webkit-text-fill-color: transparent;
   }
+  .logo .fill, .logo .shine { transform: skewX(-12deg); }
   .logo .fill {
     background-image: var(--gloss);
   }
@@ -84,15 +85,15 @@
   }
   :root {
     --gloss: linear-gradient(180deg,
-      #ff4d5c 0%, #e0102a 18%, #b0001a 40%, #6e0009 52%,
-      #8c0010 62%, #c3001c 82%, #ff3347 100%);
+      #f2565b 0%, #de272c 22%, #de272c 48%, #b81d22 56%,
+      #de272c 66%, #de272c 88%, #ea4045 100%);
   }
   @keyframes logo {
-    0%   { opacity: 0; transform: scale(1.35); filter: blur(2vmin) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
-    8%   { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
-    50%  { filter: blur(0) drop-shadow(0 0 1.6vmin rgba(230,0,30,.7)) drop-shadow(0 0 7vmin rgba(180,0,20,.5)); }
-    90%  { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
-    100% { opacity: 0; transform: scale(.96);  filter: blur(1vmin) drop-shadow(0 0 1vmin rgba(200,0,20,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    0%   { opacity: 0; transform: scale(1.35); filter: blur(2vmin) drop-shadow(0 0 1vmin rgba(222,39,44,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    8%   { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(222,39,44,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    50%  { filter: blur(0) drop-shadow(0 0 1.6vmin rgba(222,39,44,.7)) drop-shadow(0 0 7vmin rgba(180,0,20,.5)); }
+    90%  { opacity: 1; transform: scale(1);    filter: blur(0) drop-shadow(0 0 1vmin rgba(222,39,44,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
+    100% { opacity: 0; transform: scale(.96);  filter: blur(1vmin) drop-shadow(0 0 1vmin rgba(222,39,44,.5)) drop-shadow(0 0 4vmin rgba(160,0,15,.35)); }
   }
   @keyframes sweep {
     0%, 10% { background-position: 150% 0; }
@@ -118,9 +119,10 @@
 
   .title {
     display: flex; flex-direction: column; align-items: center;
-    font-weight: 700;
+    font-weight: 400;
     text-transform: uppercase;
-    filter: drop-shadow(0 0 .8vmin rgba(200,0,20,.55));
+    transform: skewX(-12deg);
+    filter: drop-shadow(0 0 .8vmin rgba(222,39,44,.55));
   }
   .word {
     display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em;
