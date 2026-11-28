@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROG Finale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=block" rel="stylesheet">
+<style>
+  /* OLED: pure #000 everywhere except the lit elements */
+  :root {
+    --red: #de272c;
+    --gloss: linear-gradient(180deg, #f2565b 0%, #de272c 22%, #de272c 48%, #b81d22 56%, #de272c 66%, #de272c 88%, #ea4045 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  body { font-family: "Audiowide", "Arial Black", Impact, sans-serif; cursor: none; }
+
+  #stage { position: fixed; inset: 0; background: #000; perspective: 150vmin; perspective-origin: 50% 50%; overflow: hidden; }
+  #aura {
+    position: absolute; left: 50%; top: 50%; width: 95vmin; height: 95vmin;
+    margin: -47.5vmin 0 0 -47.5vmin; border-radius: 50%;
+    background: radial-gradient(circle, rgba(170,10,20,.32) 0%, rgba(90,0,8,.12) 38%, rgba(0,0,0,0) 66%);
+  }
+  #cam, .group, #end { position: absolute; inset: 0; transform-style: preserve-3d; }
+  .group { display: grid; place-items: center; }
+  .content { display: flex; flex-direction: column; align-items: center; }
+
+  .gl {
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent; -webkit-text-fill-color: transparent;
+  }
+  .logo { position: relative; font-size: 24vmin; line-height: 1; letter-spacing: .06em; padding-left: .06em; }
+  .logo .fill, .logo .shine { display: block; transform: skewX(-12deg); }
+  .logo .fill { background-image: var(--gloss); }
+  .shine {
+    position: absolute; inset: 0; padding-left: .06em;
+    background-image: linear-gradient(105deg, transparent 42%, rgba(255,120,130,.55) 47%, rgba(255,235,235,.95) 50%, rgba(255,120,130,.55) 53%, transparent 58%);
+    background-size: 300% 100%; background-repeat: no-repeat;
+  }
+  .divider {
+    width: 46vmin; height: .35vmin; margin: 2.2vmin 0 3vmin;
+    background: linear-gradient(90deg, transparent, var(--red), transparent);
+    box-shadow: 0 0 1.5vmin rgba(222,39,44,.55);
+  }
+  .title { display: flex; flex-direction: column; align-items: center; text-transform: uppercase;
+           transform: skewX(-12deg); filter: drop-shadow(0 0 .8vmin rgba(222,39,44,.55)); }
+  .word {
+    display: block; line-height: 1.1; letter-spacing: .18em; padding-left: .18em;
+    background-image: linear-gradient(105deg, transparent 44%, rgba(255,230,230,.9) 50%, transparent 56%), var(--gloss);
+    background-size: 300% 100%, 100% 100%; background-repeat: no-repeat;
+  }
+  .game, .republic { font-size: 8vmin; }
+  .of { font-size: 4.6vmin; letter-spacing: .4em; padding-left: .4em; margin: .6vmin 0; }
+
+  /* final logo: stacked layers give it real 3D depth when the camera turns */
+  #end { display: grid; place-items: center; }
+  #end .layer { grid-area: 1 / 1; font-size: 34vmin; line-height: 1; letter-spacing: .06em; padding: 14vmin 18vmin 14vmin calc(18vmin + .06em); }
+  #end .layer span { display: block; transform: skewX(-12deg); }
+  #end .back span { color: var(--c); }
+  #end .front .fill { background-image: var(--gloss); }
+  #end .front .inner { position: relative; }
+  #end .ghost span { color: var(--c); }
+  #end img { display: block; height: 40vmin; width: auto; }
+
+  #fx { position: absolute; inset: 0; width: 100%; height: 100%; mix-blend-mode: screen; pointer-events: none; }
+  #flash { position: absolute; inset: 0; opacity: 0; pointer-events: none;
+           background: radial-gradient(circle at 50% 50%, #fff 0%, #ff6a5a 18%, rgba(222,39,44,.6) 40%, rgba(0,0,0,0) 75%); }
+  #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="aura"></div>
+  <div id="cam">
+    <div class="group" id="top"></div>
+    <div class="group" id="bot"></div>
+    <div id="end"></div>
+  </div>
+  <canvas id="fx"></canvas>
+  <div id="flash"></div>
+  <div id="fade"></div>
+</div>
+<script>
+/* ?v=1 explosion · ?v=2 rotation 3D · ?v=3 laser cut · ?logo=file.png uses your own logo image for the finale */
+const Q = new URLSearchParams(location.search);
+const V = +(Q.get('v') || 1);
+const LOGO = Q.get('logo');
+const CAPTURE = Q.has('capture');
+const DUR = 14;
+const T_EVT = 7.3;           // moment the text is destroyed
+
+const CONTENT = `<div class="content">
+  <div class="logo"><span class="fill gl">ROG</span><span class="shine gl" aria-hidden="true">ROG</span></div>
+  <div class="divider"></div>
+  <div class="title"><span class="word gl game">Game</span><span class="word gl of">Of</span><span class="word gl republic">Republic</span></div>
+</div>`;
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+$('#top').innerHTML = CONTENT; $('#bot').innerHTML = CONTENT;
+
+// final logo layers
+(function buildEnd() {
+  const N = 16, end = $('#end'); let h = '';
+  for (let i = N; i >= 1; i--) {
+    const k = i / N, c = `rgb(${Math.round(150 - 110 * k)},${Math.round(14 - 12 * k)},${Math.round(20 - 16 * k)})`;
+    h += LOGO
+      ? `<div class="layer back" data-z="${i}"><img src="${LOGO}" style="filter:brightness(${.55 - .4 * k})"></div>`
+      : `<div class="layer back" data-z="${i}" style="--c:${c}"><span>ROG</span></div>`;
+  }
+  if (!LOGO) h += `<div class="layer ghost ga" style="--c:#ff1f45"><span>ROG</span></div><div class="layer ghost gb" style="--c:#6a0010"><span>ROG</span></div>`;
+  h += LOGO
+    ? `<div class="layer front" data-z="0"><img src="${LOGO}"></div>`
+    : `<div class="layer front" data-z="0"><div class="inner"><span class="fill gl">ROG</span><span class="shine gl" aria-hidden="true">ROG</span></div></div>`;
+  end.innerHTML = h;
+})();
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const oCubic = x => 1 - Math.pow(1 - x, 3), iCubic = x => x * x * x;
+const oExpo = x => x >= 1 ? 1 : 1 - Math.pow(2, -10 * x);
+const ioCubic = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const oBack = x => { const c1 = 1.4, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function sweep(t, wins) { let x = 150; for (const [a, b] of wins) if (t >= a) x = 150 - 200 * prog(t, a, b); return x; }
+const TAN = Math.tan(-12 * Math.PI / 180);
+
+let W, H, vm, dpr, cutY = 0, center = { x: 0, y: 0 }, box = null;
+let parts = [], embers = [], lines = [], sparks = [];
+const cv = $('#fx'), ctx = cv.getContext('2d');
+
+// ---------- per-frame scene ----------
+function render(t) {
+  const g = .5 + .5 * Math.sin(t * Math.PI * 2 / 4);
+  const glow = (k = 1) => `drop-shadow(0 0 ${(1 + .6 * g) * vm * k}px rgba(222,39,44,${.5 + .2 * g})) drop-shadow(0 0 ${(4 + 3 * g) * vm * k}px rgba(160,0,15,${.35 + .15 * g}))`;
+
+  // intro (shared by all three)
+  const ls = oCubic(prog(t, 0, 1));
+  $$('.group .logo').forEach(e => { e.style.opacity = ls; e.style.transform = `scale(${1.35 - .35 * ls})`; e.style.filter = `blur(${(1 - ls) * 2 * vm}px) ${glow()}`; });
+  $$('.group .logo .shine').forEach(e => e.style.backgroundPosition = `${sweep(t, [[1.2, 2.4], [4.8, 6.0]])}% 0`);
+  const dv = oCubic(prog(t, .9, 1.7));
+  $$('.group .divider').forEach(e => { e.style.opacity = dv; e.style.transform = `scaleX(${dv})`; });
+  const gx = (1 - oExpo(prog(t, 1.5, 2.6))) * -110, rx = (1 - oExpo(prog(t, 3.3, 4.4))) * 110;
+  const os = oCubic(prog(t, 2.6, 3.3));
+  const wsw = `${sweep(t, [[5.0, 6.2]])}% 0, 0 0`;
+  $$('.group .game').forEach(e => { e.style.opacity = t >= 1.5 ? 1 : 0; e.style.transform = `translateX(${gx}vw)`; e.style.backgroundPosition = wsw; });
+  $$('.group .of').forEach(e => { e.style.opacity = os; e.style.transform = `scale(${.6 + .4 * os})`; e.style.filter = `blur(${(1 - os) * vm}px)`; e.style.backgroundPosition = wsw; });
+  $$('.group .republic').forEach(e => { e.style.opacity = t >= 3.3 ? 1 : 0; e.style.transform = `translateX(${rx}vw)`; e.style.backgroundPosition = wsw; });
+  $('#aura').style.opacity = oCubic(prog(t, 0, 1.2)) * (.75 + .25 * g);
+
+  const top = $('#top'), bot = $('#bot'), end = $('#end'), cam = $('#cam'), flash = $('#flash');
+  top.style.transform = bot.style.transform = ''; top.style.opacity = 1; top.style.filter = '';
+  bot.style.display = V === 3 ? '' : 'none';
+  top.style.clipPath = V === 3 ? `inset(0px 0px ${H - cutY}px 0px)` : 'none';
+  bot.style.clipPath = `inset(${cutY}px 0px 0px 0px)`;
+  cam.style.transform = ''; flash.style.opacity = 0;
+
+  // end logo state, set by each variant
+  let E = { o: 0, s: 1, rx: 0, ry: 0, x: 0, y: 0, blur: 0, clip: null, glitch: 0 };
+  const hold = (t0) => { const k = prog(t, t0, t0 + 1.5); return { ry: 9 * Math.sin((t - t0) * .7) * k, rx: 4 * Math.sin((t - t0) * .5) * k }; };
+
+  if (V === 1) {                                   // ---- EXPLOSION ----
+    const c = prog(t, 6.4, T_EVT), q = rng(Math.floor(t * 30) + 7);
+    const a = c * c * .7 * vm;
+    top.style.transform = `translate(${(q() - .5) * 2 * a}px,${(q() - .5) * 2 * a}px) scale(${1 + .04 * c})`;
+    top.style.filter = `brightness(${1 + .8 * c})`;
+    if (t >= T_EVT) top.style.opacity = 0;
+    flash.style.opacity = t >= T_EVT ? Math.pow(1 - prog(t, T_EVT, T_EVT + .7), 2) * .95 : c * c * .25;
+    const k = prog(t, 8.1, 8.55), ki = iCubic(k);
+    const sh = t > 8.55 ? Math.exp(-(t - 8.55) * 7) * 1.6 * vm : 0, q2 = rng(Math.floor(t * 30) + 99);
+    cam.style.transform = `translate(${(q2() - .5) * 2 * sh}px,${(q2() - .5) * 2 * sh}px)`;
+    const h = hold(9.3);
+    E = { ...E, o: ki > 0 ? Math.min(1, k * 3) : 0, s: 4 - 3 * ki, blur: (1 - ki) * 3 * vm, ...h };
+    if (t >= 8.55) flash.style.opacity = Math.pow(1 - prog(t, 8.55, 9.0), 2) * .5;
+  } else if (V === 2) {                            // ---- ROTATION / CAMERA ----
+    const p1 = ioCubic(prog(t, 5.6, 6.6)), p2 = iCubic(prog(t, 6.6, 7.6));
+    top.style.transform = `translateZ(${-60 * p2}vmin) rotateX(${6 * p1 - 10 * p2}deg) rotateY(${16 * p1 - 105 * p2}deg)`;
+    top.style.opacity = 1 - prog(t, 7.25, 7.6);
+    const k = prog(t, 7.4, 8.8), kb = oBack(k);
+    const h = hold(8.8);
+    E = { ...E, o: prog(t, 7.4, 7.7), s: .7 + .3 * oCubic(k), ry: 110 * (1 - kb) + h.ry * 1.6, rx: -14 * (1 - oCubic(k)) + h.rx * 1.4, blur: (1 - oCubic(prog(t, 7.4, 8.0))) * 1.5 * vm };
+    flash.style.opacity = Math.pow(1 - prog(t, 8.5, 9.1), 2) * (t > 8.5 ? .35 : 0);
+  } else {                                         // ---- LASER CUT ----
+    const s = ioCubic(prog(t, 7.4, 8.6));
+    top.style.transform = `translate(${-6 * s}vmin,${-20 * s}vmin) rotate(${-4 * s}deg)`;
+    bot.style.transform = `translate(${6 * s}vmin,${24 * s}vmin) rotate(${4 * s}deg)`;
+    top.style.opacity = bot.style.opacity = 1 - prog(t, 7.9, 8.6);
+    const lit = t > 6.6 && t < 7.4 ? 1 + .6 * Math.sin(t * 60) * .3 : 1;
+    top.style.filter = `brightness(${lit})`;
+    const k = oExpo(prog(t, 8.0, 8.9));
+    const q = rng(Math.floor(t * 30) + 3);
+    const gl = (t > 8.85 && t < 9.25) || (t > 11.2 && t < 11.4) ? 1 : 0;
+    const h = hold(9.5);
+    E = { ...E, o: t >= 8.0 ? 1 : 0, clip: k >= 1 ? null : `inset(${50 * (1 - k)}% 0% ${50 * (1 - k)}% 0%)`, glitch: gl, x: gl && q() > .35 ? (q() - .5) * 3 * vm : 0, ...h };
+    flash.style.opacity = t > 8.0 ? Math.pow(1 - prog(t, 8.0, 8.6), 2) * .45 : 0;
+  }
+
+  // apply end logo
+  end.style.transform = `translate3d(${E.x}px,${E.y}px,0) rotateX(${E.rx}deg) rotateY(${E.ry}deg) scale(${E.s})`;
+  const qg = rng(Math.floor(t * 30) + 11);
+  $$('#end .layer').forEach(l => {
+    if (l.classList.contains('ghost')) {
+      const off = (l.classList.contains('ga') ? -1 : 1) * (1 + qg() * 1.5) * vm;
+      l.style.opacity = E.glitch ? .75 : 0;
+      l.style.transform = `translate3d(${off}px,${(qg() - .5) * vm}px,1px)`;
+      return;
+    }
+    const z = +l.dataset.z;
+    l.style.opacity = E.o;
+    l.style.transform = `translateZ(${-z * .32 * vm}px)`;
+    l.style.clipPath = E.clip || 'none';
+    if (z === 0) l.style.filter = `${E.blur > .5 ? `blur(${E.blur}px) ` : ''}${glow(1.3)}`;
+  });
+  const es = $('#end .front .shine');
+  if (es) es.style.backgroundPosition = `${sweep(t, V === 1 ? [[9.3, 10.5], [11.6, 12.8]] : V === 2 ? [[8.6, 9.8], [11.4, 12.6]] : [[9.4, 10.6], [11.7, 12.9]])}% 0`;
+
+  $('#fade').style.opacity = ioCubic(prog(t, 13, 14));
+  drawFx(t);
+}
+
+// ---------- canvas effects ----------
+function drawFx(t) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+  const fade = 1 - prog(t, 12.8, 13.9);
+
+  if (V === 1 && t >= T_EVT) {
+    const dt = t - T_EVT;
+    // shockwaves
+    ring(center.x, center.y, dt, 1.2, .8 * Math.max(W, H), 3.2);
+    if (t >= 8.55) ring(center.x, center.y, t - 8.55, .9, .55 * Math.max(W, H), 2);
+    // debris
+    for (const p of parts) {
+      if (dt > p.life) continue;
+      const e = (1 - Math.exp(-p.k * dt)) / p.k;
+      const x = p.x + p.vx * e, y = p.y + p.vy * e + .5 * p.gy * dt * dt;
+      const a = Math.pow(1 - dt / p.life, 1.4) * fade;
+      const sz = Math.min(p.sz * (1 + p.zg * dt), p.sz * 2.2);
+      if (p.hot) {
+        const e2 = (1 - Math.exp(-p.k * Math.max(0, dt - .035))) / p.k;
+        const x2 = p.x + p.vx * e2, y2 = p.y + p.vy * e2 + .5 * p.gy * (dt - .035) * Math.max(0, dt - .035);
+        ctx.strokeStyle = `rgba(255,${170 - 90 * dt / p.life | 0},${110 - 80 * dt / p.life | 0},${a})`;
+        ctx.lineWidth = sz * .6; ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x, y); ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${a})`;
+        ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+      }
+    }
+  }
+  if (V === 2 && t > 6.9 && t < 8.6) {
+    const env = Math.sin(Math.PI * prog(t, 6.9, 8.6));
+    for (const l of lines) {
+      const x = W + l.len - (((t - 6.9) * l.sp * vm + l.off * W) % (W + 2 * l.len));
+      const gr = ctx.createLinearGradient(x, 0, x + l.len, 0);
+      gr.addColorStop(0, `rgba(255,140,140,${.9 * env * l.a})`); gr.addColorStop(1, 'rgba(222,39,44,0)');
+      ctx.strokeStyle = gr; ctx.lineWidth = l.w; ctx.beginPath(); ctx.moveTo(x, l.y); ctx.lineTo(x + l.len, l.y); ctx.stroke();
+    }
+  }
+  if (V === 3 && box) {
+    const x0 = box.left - 8 * vm, x1 = box.right + 8 * vm;
+    const hx = x0 + (x1 - x0) * ioCubic(prog(t, 6.6, 7.3));
+    const la = t < 6.6 ? 0 : t < 7.4 ? 1 : 1 - prog(t, 7.4, 8.1);
+    if (la > 0) {
+      for (const [w, a] of [[3.2, .08], [1.4, .25], [.45, .9], [.15, 1]]) {
+        ctx.strokeStyle = w < .3 ? `rgba(255,245,240,${a * la})` : `rgba(255,50,60,${a * la})`;
+        ctx.lineWidth = w * vm; ctx.beginPath(); ctx.moveTo(x0, cutY); ctx.lineTo(hx, cutY); ctx.stroke();
+      }
+      if (t < 7.35) flare(hx, cutY, 5 * vm, 1);
+    }
+    for (const s of sparks) {
+      const dt = t - s.t0; if (dt < 0 || dt > s.life) continue;
+      const pos = d => [s.x + s.vx * d, s.y + s.vy * d + .5 * s.gy * d * d];
+      const [x, y] = pos(dt), [x2, y2] = pos(Math.max(0, dt - .03));
+      const a = (1 - dt / s.life);
+      ctx.strokeStyle = `rgba(255,${200 - 120 * dt / s.life | 0},${150 - 110 * dt / s.life | 0},${a})`;
+      ctx.lineWidth = s.w; ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x, y); ctx.stroke();
+    }
+  }
+  // drifting embers after the finale (1 & 3)
+  if (V !== 2 && t > T_EVT) {
+    const ea = prog(t, T_EVT, T_EVT + 1) * fade;
+    for (const e of embers) {
+      const y = H + 2 * vm - ((t * e.sp * vm + e.ph * H) % (H + 4 * vm));
+      const x = e.x + Math.sin(t * e.f + e.ph * 6) * 2.5 * vm;
+      const a = ea * (.35 + .45 * (.5 + .5 * Math.sin(t * e.f * 3 + e.ph * 9)));
+      ctx.fillStyle = `rgba(255,${80 + e.h * 90 | 0},${40 + e.h * 40 | 0},${a})`;
+      ctx.beginPath(); ctx.arc(x, y, e.r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+function ring(x, y, dt, dur, maxR, width) {
+  if (dt < 0 || dt > dur) return;
+  const p = dt / dur, r = maxR * oCubic(p), a = Math.pow(1 - p, 1.5);
+  for (const [w, al] of [[width * 3, .12], [width, .45], [width * .3, .9]]) {
+    ctx.strokeStyle = `rgba(255,${w < width ? 190 : 70},${w < width ? 170 : 60},${al * a})`;
+    ctx.lineWidth = w * vm * (1 - p * .7); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+function flare(x, y, r, a) {
+  const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(.25, `rgba(255,90,90,${.7 * a})`); gr.addColorStop(1, 'rgba(222,39,44,0)');
+  ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+}
+
+// ---------- setup: measure the finished intro and build particles from the real letters ----------
+function setup() {
+  W = innerWidth; H = innerHeight; vm = Math.min(W, H) / 100; dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  cutY = 0; render(6.2);
+  const lr = $('#top .logo .fill').getBoundingClientRect();
+  cutY = lr.top + lr.height * .56;
+  const els = [$('#top .logo .fill'), ...$$('#top .word')];
+  const rs = els.map(e => e.getBoundingClientRect());
+  box = { left: Math.min(...rs.map(r => r.left)), right: Math.max(...rs.map(r => r.right)), top: lr.top, bottom: Math.max(...rs.map(r => r.bottom)) };
+  center = { x: W / 2, y: (box.top + box.bottom) / 2 };
+
+  // rasterise the text exactly where it sits, then turn its pixels into debris
+  const oc = document.createElement('canvas'); oc.width = W; oc.height = H;
+  const o = oc.getContext('2d'); o.fillStyle = '#fff';
+  els.forEach((el, i) => {
+    const r = rs[i], cs = getComputedStyle(el), fs = parseFloat(cs.fontSize), lsp = parseFloat(cs.letterSpacing) || 0;
+    o.font = `${fs}px Audiowide`; o.letterSpacing = `${lsp}px`; o.textAlign = 'center'; o.textBaseline = 'alphabetic';
+    const m = o.measureText(el.textContent.toUpperCase()), A = m.fontBoundingBoxAscent, D = m.fontBoundingBoxDescent;
+    const lh = el.offsetHeight, cy = r.top + lh / 2;
+    o.save(); o.translate(r.left + r.width / 2, cy); o.transform(1, 0, TAN, 1, 0, 0);
+    o.fillText(el.textContent.toUpperCase(), lsp / 2, -lh / 2 + (lh - A - D) / 2 + A);
+    o.restore();
+  });
+  const dr = $('#top .divider').getBoundingClientRect(); o.fillRect(dr.left + dr.width * .2, dr.top, dr.width * .6, dr.height);
+  const img = o.getImageData(0, 0, W, H).data;
+  const step = Math.max(2, Math.round(2.6 * vm / 10.8 * 2));
+  const R = rng(1234); parts = [];
+  for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step) {
+    if (img[(y * W + x) * 4 + 3] < 128) continue;
+    const dx = x - center.x, dy = y - center.y, d = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx) + (R() - .5) * .9;
+    const sp = (18 + 95 * Math.pow(R(), 1.6)) * vm * (.6 + .6 * Math.min(1, d / (30 * vm)));
+    const hot = R() < .09, rel = (y - box.top) / (box.bottom - box.top);
+    const sh = R();
+    parts.push({ x, y, vx: Math.cos(ang) * sp * (hot ? 1.5 : 1), vy: Math.sin(ang) * sp * (hot ? 1.5 : 1) - 8 * vm,
+      k: 1.4 + R() * 1.6, gy: (5 + R() * 10) * vm, life: 1.1 + R() * 2.2, sz: step * (.7 + R() * .7), zg: R() < .12 ? .4 + R() * .8 : 0, hot,
+      r: sh < .15 ? 255 : sh < .35 ? 242 : 222, g: sh < .15 ? 150 : sh < .35 ? 86 : 39, b: sh < .15 ? 120 : sh < .35 ? 91 : 44 });
+  }
+  const E = rng(77); embers = [];
+  for (let i = 0; i < 140; i++) embers.push({ x: E() * W, ph: E(), sp: 3 + E() * 7, f: .5 + E() * 1.2, r: (.12 + E() * .3) * vm, h: E() });
+  const L = rng(55); lines = [];
+  for (let i = 0; i < 70; i++) lines.push({ y: L() * H, len: (15 + L() * 45) * vm, sp: 220 + L() * 380, off: L(), w: (.08 + L() * .35) * vm, a: .3 + L() * .7 });
+  const S = rng(9); sparks = [];
+  const x0 = box.left - 8 * vm, x1 = box.right + 8 * vm;
+  for (let i = 0; i < 420; i++) {        // sparks thrown by the laser head
+    const t0 = 6.6 + .7 * (i / 420), hx = x0 + (x1 - x0) * ioCubic(prog(t0, 6.6, 7.3));
+    if (hx < box.left || hx > box.right) continue;
+    const ang = Math.PI * (.55 + S() * .9), sp = (20 + S() * 60) * vm;
+    sparks.push({ t0, x: hx, y: cutY, vx: Math.cos(ang) * sp - 10 * vm, vy: -Math.sin(ang) * sp * (S() < .5 ? -1 : 1), gy: 90 * vm, life: .35 + S() * .6, w: (.1 + S() * .2) * vm });
+  }
+  for (let i = 0; i < 360; i++) {        // burst along the cut when the halves split
+    const ang = S() * Math.PI * 2, sp = (10 + S() * 70) * vm;
+    sparks.push({ t0: 7.4 + S() * .15, x: box.left + S() * (box.right - box.left), y: cutY, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp * .6, gy: 70 * vm, life: .4 + S() * .9, w: (.1 + S() * .25) * vm });
+  }
+}
+
+window.ready = document.fonts.ready.then(() => { setup(); render(0); return true; });
+window.render = render;
+if (!CAPTURE) {
+  let start = null;
+  const loop = now => { if (start === null) start = now; render(((now - start) / 1000) % DUR); requestAnimationFrame(loop); };
+  window.ready.then(() => requestAnimationFrame(loop));
+  addEventListener('resize', () => setup());
+}
+</script>
+</body>
+</html>
