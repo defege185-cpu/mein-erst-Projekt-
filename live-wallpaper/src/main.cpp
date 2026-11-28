@@ -24,6 +24,7 @@
 #include <initguid.h>
 #include <mfmediaengine.h>
 #include <cstdio>
+#include <cmath>
 #include <cstdarg>
 #include <cwchar>
 #include <string>
@@ -85,6 +86,8 @@ static HPOWERNOTIFY gDisplayNotify;
 static bool gManualPause, gLocked, gDisplayOff, gPlaying, gTest, gGpu;
 static int gTestSeconds;
 static UINT gFailures;
+static double gLastPos = -1;
+static int gStall;
 
 // ---------------------------------------------------------------- log
 static void Log(const wchar_t* fmt, ...) {
@@ -430,7 +433,8 @@ static bool ChooseVideo(HWND owner) {
 
 static void Teardown() {
     StopEngine();
-    if (gVideo) { DestroyWindow(gVideo); gVideo = nullptr; }
+    if (gVideo && IsWindow(gVideo)) DestroyWindow(gVideo);
+    gVideo = nullptr;
 }
 
 static void Rebuild() {
@@ -498,7 +502,27 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     }
     case WM_TIMER:
-        if (w == TIMER_WATCH) UpdatePlayback();
+        if (w == TIMER_WATCH) {
+            if (!gVideo || !IsWindow(gVideo) || !IsWindow(GetParent(gVideo))) {
+                Log(L"desktop window lost, reattaching");
+                gVideo = nullptr; gStall = 0; gLastPos = -1;
+                Rebuild();
+                return 0;
+            }
+            UpdatePlayback();
+            if (gEngine && gPlaying && !gEngine->IsPaused()) {
+                double pos = gEngine->GetCurrentTime();
+                if (std::fabs(pos - gLastPos) < 0.01) {
+                    if (++gStall >= 4) {
+                        Log(L"playback stalled at %.2f s, restarting", pos);
+                        gStall = 0; gLastPos = -1;
+                        Rebuild();
+                        return 0;
+                    }
+                } else gStall = 0;
+                gLastPos = pos;
+            } else { gStall = 0; gLastPos = -1; }
+        }
         else if (w == TIMER_REBUILD) { KillTimer(h, TIMER_REBUILD); Rebuild(); }
         else if (w == TIMER_TEST) {
             double t = gEngine ? gEngine->GetCurrentTime() : -1;
@@ -510,6 +534,9 @@ static LRESULT CALLBACK MsgProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
     case WM_DISPLAYCHANGE:
         SetTimer(h, TIMER_REBUILD, 1500, nullptr);
+        return 0;
+    case WM_SETTINGCHANGE:
+        if (w == SPI_SETDESKWALLPAPER) SetTimer(h, TIMER_REBUILD, 1500, nullptr);
         return 0;
     case WM_WTSSESSION_CHANGE:
         if (w == WTS_SESSION_LOCK) gLocked = true;
