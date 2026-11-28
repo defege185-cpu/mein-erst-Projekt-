@@ -839,6 +839,23 @@ function Get-StartupNote([string]$Name, [string]$Command) {
     return $null
 }
 
+# Nom lisible d'un programme : description du fichier .exe (ex. « Google Chrome »), sinon le nom de l'entrée.
+function Get-StartupDisplayName([string]$Name, [string]$Command) {
+    $exe = $null
+    if ($Command -match '^\s*"([^"]+?\.exe)"') { $exe = $Matches[1] }
+    elseif ($Command -match '^\s*(.+?\.exe)(\s|$)') { $exe = $Matches[1] }
+    if ($exe) {
+        $exe = [Environment]::ExpandEnvironmentVariables($exe)
+        try {
+            if (Test-Path -LiteralPath $exe) {
+                $d = (Get-Item -LiteralPath $exe -ErrorAction Stop).VersionInfo.FileDescription
+                if ($d -and $d.Trim().Length -gt 1) { return $d.Trim() }
+            }
+        } catch { }
+    }
+    return $Name
+}
+
 function Get-StartupEntries {
     $res = New-Object System.Collections.Generic.List[object]
     foreach ($src in $StartupSources) {
@@ -856,7 +873,7 @@ function Get-StartupEntries {
         foreach ($it in $items) {
             $c = Read-Reg $src.Approved $it[0]
             $res.Add([pscustomobject]@{
-                Name = $it[2]; ValueName = $it[0]; Command = $it[1]; Approved = $src.Approved; Scope = $src.Scope
+                Name = (Get-StartupDisplayName $it[2] $it[1]); ValueName = $it[0]; Command = $it[1]; Approved = $src.Approved; Scope = $src.Scope
                 Enabled = (-not $c.Exists) -or (Test-StartupEnabled $c.Value)
                 Id = 'Startup|' + $src.Approved + '|' + $it[0]; Note = (Get-StartupNote $it[0] $it[1])
             })
@@ -1814,7 +1831,8 @@ try {
             $cb.Add_Checked({ Update-StartupCount }); $cb.Add_Unchecked({ Update-StartupCount })
             [void]$sp.Children.Add($cb)
             $cmd = $e.Command
-            if ($cmd.Length -gt 120) { $cmd = $cmd.Substring(0, 117) + '...' }
+            if ($e.ValueName -and $e.ValueName -ne $e.Name -and $e.Command -ne $e.ValueName) { $cmd = $e.ValueName + '   ·   ' + $cmd }
+            if ($cmd.Length -gt 140) { $cmd = $cmd.Substring(0, 137) + '...' }
             [void]$sp.Children.Add((New-Text $cmd '#97A1B3' 12 -Margin (Th 21 3 0 0)))
             $wp = New-Object System.Windows.Controls.WrapPanel; $wp.Margin = (Th 21 0 0 0)
             if ($e.Enabled) { [void]$wp.Children.Add((New-Badge (Tr 'Activé') '#5BD48A' '#14301F')) }

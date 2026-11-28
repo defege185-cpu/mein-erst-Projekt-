@@ -278,6 +278,15 @@ Check 'Démarrage : désactiver puis réactiver depuis l''onglet Démarrage' {
         if ($e) { Remove-ItemProperty -LiteralPath $e.Approved -Name $TestName -ErrorAction SilentlyContinue }
     }
 }
+Check 'Démarrage : nom lisible des programmes' {
+    $np = Join-Path $env:SystemRoot 'System32\notepad.exe'
+    $a = Get-StartupDisplayName 'Test_ABC123' ('"' + $np + '" --flag')
+    $b = Get-StartupDisplayName 'Test_ABC123' ($np + ' /x')
+    $c = Get-StartupDisplayName 'Test_ABC123' 'C:\Introuvable\app.exe --x'
+    $d = Get-StartupDisplayName 'Raccourci' 'C:\Users\x\Startup\Raccourci.lnk'
+    Write-Host "         notepad -> « $a »"
+    ($a -ne 'Test_ABC123') -and ($a -eq $b) -and ($c -eq 'Test_ABC123') -and ($d -eq 'Raccourci')
+}
 Check 'Liste des programmes au démarrage (lecture)' { $l = @(Get-StartupEntries); Write-Host "         $($l.Count) programme(s) au démarrage"; $true }
 Check 'winget (information)' {
     $wg = Get-WingetPath
