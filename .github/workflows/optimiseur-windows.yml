@@ -35,7 +35,7 @@ jobs:
           }
           $png = @(Get-ChildItem $out -Filter *.png -ErrorAction SilentlyContinue)
           $png | Format-Table Name, Length
-          if ($png.Count -ne 15) { Write-Host "::error::$($png.Count) captures au lieu de 15"; exit 1 }
+          if ($png.Count -ne 21) { Write-Host "::error::$($png.Count) captures au lieu de 21"; exit 1 }
       - name: Envoi des captures
         if: always()
         uses: actions/upload-artifact@v4

@@ -24,7 +24,7 @@ param(
 
 Set-StrictMode -Off
 $AppName    = 'Optimiseur PC'
-$AppVersion = '1.0.0'
+$AppVersion = '1.1.0'
 
 if ($env:OS -ne 'Windows_NT') {
     Write-Error 'Cette application fonctionne uniquement sous Windows 10 et Windows 11.'
@@ -659,6 +659,308 @@ function Test-IntelRaptorDesktop([string]$CpuName) {
     return [bool]($CpuName -match 'Intel.*Core.*\bi[579]-1[34]\d{3}(K|KF|KS|F)?\b')
 }
 
+# ---------------------------------------------------------------------------------------------
+#  Astuces intelligentes : analyse du PC (lecture seule) puis conseils personnalisés
+# ---------------------------------------------------------------------------------------------
+function Get-DisplayModes {
+    if (-not ('OptPC.Display' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+namespace OptPC {
+    public static class Display {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DEVMODE {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+            public short dmSpecVersion; public short dmDriverVersion; public short dmSize; public short dmDriverExtra;
+            public int dmFields; public int dmPositionX; public int dmPositionY; public int dmDisplayOrientation; public int dmDisplayFixedOutput;
+            public short dmColor; public short dmDuplex; public short dmYResolution; public short dmTTOption; public short dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+            public short dmLogPixels; public int dmBitsPerPel; public int dmPelsWidth; public int dmPelsHeight;
+            public int dmDisplayFlags; public int dmDisplayFrequency; public int dmICMMethod; public int dmICMIntent;
+            public int dmMediaType; public int dmDitherType; public int dmReserved1; public int dmReserved2;
+            public int dmPanningWidth; public int dmPanningHeight;
+        }
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DISPLAY_DEVICE {
+            public int cb;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+            public int StateFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+        }
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern bool EnumDisplayDevices(string device, uint devNum, ref DISPLAY_DEVICE displayDevice, uint flags);
+        // [numéro, largeur, hauteur, fréquence actuelle, fréquence maximale à cette résolution]
+        public static List<int[]> Modes() {
+            var res = new List<int[]>();
+            for (uint i = 0; i < 16; i++) {
+                var dd = new DISPLAY_DEVICE(); dd.cb = Marshal.SizeOf(dd);
+                if (!EnumDisplayDevices(null, i, ref dd, 0)) break;
+                if ((dd.StateFlags & 1) == 0) continue;
+                var cur = new DEVMODE(); cur.dmSize = (short)Marshal.SizeOf(cur);
+                if (!EnumDisplaySettings(dd.DeviceName, -1, ref cur)) continue;
+                int max = cur.dmDisplayFrequency;
+                var m = new DEVMODE(); m.dmSize = (short)Marshal.SizeOf(m);
+                for (int k = 0; k < 4000 && EnumDisplaySettings(dd.DeviceName, k, ref m); k++) {
+                    if (m.dmPelsWidth == cur.dmPelsWidth && m.dmPelsHeight == cur.dmPelsHeight
+                        && m.dmDisplayFrequency > max && m.dmDisplayFrequency < 1000) max = m.dmDisplayFrequency;
+                }
+                res.Add(new int[] { (int)i + 1, cur.dmPelsWidth, cur.dmPelsHeight, cur.dmDisplayFrequency, max });
+            }
+            return res;
+        }
+    }
+}
+'@
+    }
+    foreach ($m in [OptPC.Display]::Modes()) {
+        [pscustomobject]@{ Index = $m[0]; Width = $m[1]; Height = $m[2]; Current = $m[3]; Max = $m[4] }
+    }
+}
+
+function Get-SystemFacts {
+    $f = [ordered]@{ Displays = @(); RamModules = 0; RamType = 0; RamMHz = 0; RamGB = 0; IsLaptop = $false; OnBattery = $false
+                     SysFreePct = 100; SysFreeGB = 0; SysMedia = ''; SysHealth = ''; Gpus = @(); UptimeDays = 0; RebootPending = $false }
+    try { $f.Displays = @(Get-DisplayModes) } catch { }
+    try {
+        $mem = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop)
+        $f.RamModules = $mem.Count
+        $f.RamType = [int]($mem | Select-Object -First 1).SMBIOSMemoryType
+        $f.RamMHz = [int](($mem | Measure-Object -Property ConfiguredClockSpeed -Minimum).Minimum)
+        $f.RamGB = [int][math]::Round((($mem | Measure-Object -Property Capacity -Sum).Sum) / 1GB)
+    } catch { }
+    try {
+        $bat = @(Get-CimInstance Win32_Battery -ErrorAction Stop)
+        $f.IsLaptop = $bat.Count -gt 0
+        $f.OnBattery = [bool]($bat | Where-Object { $_.BatteryStatus -eq 1 })
+    } catch { }
+    try {
+        $vol = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -ErrorAction Stop
+        if ($vol.Size) { $f.SysFreePct = [int](100 * $vol.FreeSpace / $vol.Size); $f.SysFreeGB = [int][math]::Round($vol.FreeSpace / 1GB) }
+    } catch { }
+    try {
+        $part = Get-Partition -DriveLetter $env:SystemDrive[0] -ErrorAction Stop
+        $pd = Get-PhysicalDisk -ErrorAction Stop | Where-Object { $_.DeviceId -eq [string]$part.DiskNumber } | Select-Object -First 1
+        if ($pd) { $f.SysMedia = [string]$pd.MediaType; $f.SysHealth = [string]$pd.HealthStatus }
+    } catch { }
+    try {
+        $f.Gpus = @(Get-CimInstance Win32_VideoController -ErrorAction Stop |
+            Where-Object { $_.Name -and $_.Name -notmatch 'Basic Display|Basic Render|Remote|Virtual|Hyper-V|Parsec|Mirage|DisplayLink|Meta' } |
+            ForEach-Object { [pscustomobject]@{ Name = $_.Name.Trim(); DriverDate = $_.DriverDate } })
+    } catch { }
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $f.UptimeDays = [int][math]::Floor(((Get-Date) - $os.LastBootUpTime).TotalDays)
+    } catch { }
+    $f.RebootPending = (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or
+                       (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending')
+    return [pscustomobject]$f
+}
+
+# Conseils à partir des informations du PC. Level : warn (à corriger) ou info (conseil).
+function Get-SmartTips($Facts) {
+    $tips = New-Object System.Collections.Generic.List[object]
+    function Add-Tip([string]$Level, [string]$Text, [string]$Action = $null, [string]$Label = $null) {
+        $tips.Add([pscustomobject]@{ Level = $Level; Text = $Text; Action = $Action; Label = $Label })
+    }
+    foreach ($d in @($Facts.Displays)) {
+        if ($d.Max -ge $d.Current + 5) {
+            Add-Tip 'warn' ((Tr 'Écran {0} : réglé à {1} Hz alors qu''il peut afficher {2} Hz. Choisissez {2} Hz dans Paramètres > Affichage > Affichage avancé : les jeux et la souris seront beaucoup plus fluides.') -f $d.Index, $d.Current, $d.Max) 'ms-settings:display' (Tr 'Paramètres d''affichage')
+        }
+    }
+    if ($Facts.RebootPending) {
+        Add-Tip 'warn' (Tr 'Un redémarrage est en attente pour terminer des mises à jour de Windows.')
+    }
+    if ($Facts.SysFreePct -lt 15) {
+        Add-Tip 'warn' ((Tr 'Disque système presque plein : {0} Go libres ({1} %). Windows et les jeux ralentissent quand le disque est plein.') -f $Facts.SysFreeGB, $Facts.SysFreePct) 'ms-settings:storagesense' (Tr 'Stockage')
+    }
+    if ($Facts.SysHealth -and $Facts.SysHealth -notin @('Healthy', '0')) {
+        Add-Tip 'warn' ((Tr 'Windows signale un problème sur le disque système (état : {0}). Sauvegardez vos fichiers importants dès maintenant.') -f $Facts.SysHealth)
+    }
+    if ($Facts.SysMedia -eq 'HDD') {
+        Add-Tip 'info' (Tr 'Windows est installé sur un disque dur classique (HDD). Un SSD rend le démarrage et les chargements des jeux beaucoup plus rapides.')
+    }
+    if (-not $Facts.IsLaptop -and $Facts.RamMHz -gt 0) {
+        if (($Facts.RamType -eq 26 -and $Facts.RamMHz -le 2400) -or ($Facts.RamType -eq 34 -and $Facts.RamMHz -le 4800)) {
+            Add-Tip 'info' ((Tr 'La mémoire fonctionne à {0} MT/s. Si vos barrettes sont prévues pour plus (indiqué sur l''étiquette ou la facture), activez le profil XMP ou EXPO dans le BIOS : gain de fluidité en jeu. Suivez le manuel de votre carte mère.') -f $Facts.RamMHz)
+        }
+        if ($Facts.RamModules -eq 1) {
+            Add-Tip 'info' (Tr 'Une seule barrette de mémoire : le processeur fonctionne en simple canal. Deux barrettes identiques (double canal) donnent souvent plus d''images par seconde en jeu.')
+        }
+    }
+    if ($Facts.RamGB -gt 0 -and $Facts.RamGB -le 8) {
+        Add-Tip 'info' ((Tr '{0} Go de mémoire : fermez le navigateur pendant les jeux. 16 Go sont conseillés pour les jeux récents.') -f $Facts.RamGB)
+    }
+    foreach ($g in @($Facts.Gpus)) {
+        if ($g.DriverDate -is [datetime] -and ((Get-Date) - $g.DriverDate).TotalDays -gt 180) {
+            Add-Tip 'info' ((Tr 'Pilote de {0} daté du {1} : une version plus récente est probablement disponible sur le site officiel du fabricant.') -f $g.Name, $g.DriverDate.ToString('yyyy-MM-dd'))
+        }
+    }
+    if ($Facts.UptimeDays -ge 7) {
+        Add-Tip 'info' ((Tr 'PC allumé depuis {0} jours sans redémarrage. Utilisez « Redémarrer » (pas seulement « Arrêter », à cause du démarrage rapide) : la mémoire est libérée et les mises à jour se terminent.') -f $Facts.UptimeDays)
+    }
+    if ($Facts.OnBattery) {
+        Add-Tip 'info' (Tr 'PC portable sur batterie : branchez le chargeur pour jouer, Windows réduit les performances sur batterie.')
+    }
+    return $tips.ToArray()
+}
+
+# ---------------------------------------------------------------------------------------------
+#  Démarrage de Windows : même mécanisme que le Gestionnaire des tâches (clés StartupApproved)
+# ---------------------------------------------------------------------------------------------
+$SA = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
+$StartupSources = @(
+    [pscustomobject]@{ Kind = 'Reg';    Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run';             Approved = "HKCU:\$SA\Run";           Scope = 'user' }
+    [pscustomobject]@{ Kind = 'Reg';    Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run';             Approved = "HKLM:\$SA\Run";           Scope = 'all' }
+    [pscustomobject]@{ Kind = 'Reg';    Path = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'; Approved = "HKLM:\$SA\Run32";         Scope = 'all' }
+    [pscustomobject]@{ Kind = 'Folder'; Path = (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup');     Approved = "HKCU:\$SA\StartupFolder"; Scope = 'user' }
+    [pscustomobject]@{ Kind = 'Folder'; Path = (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'); Approved = "HKLM:\$SA\StartupFolder"; Scope = 'all' }
+)
+
+# Premier octet : bit 0 à 1 = désactivé (03), à 0 = activé (02). Valeur absente = activé.
+function Test-StartupEnabled($Bytes) {
+    $b = @($Bytes)
+    if ($b.Count -lt 1 -or $null -eq $b[0]) { return $true }
+    return (([int]$b[0] -band 1) -eq 0)
+}
+
+function Get-StartupNote([string]$Name, [string]$Command) {
+    $s = "$Name $Command"
+    if ($s -match 'SecurityHealth') { return (Tr 'Icône de Sécurité Windows : la protection antivirus reste active même si cette icône ne se lance plus.') }
+    if ($s -match 'RtkAud|Realtek|Waves|MaxxAudio|Nahimic|SmartAudio|Dolby') { return (Tr 'Logiciel audio : gardez-le si le son ou la prise casque fonctionnent mal sans lui.') }
+    if ($s -match 'OneDrive') { return (Tr 'OneDrive : vos fichiers ne se synchronisent plus tant que OneDrive n''est pas ouvert.') }
+    if ($s -match 'Teams|Zoom|Slack|Discord|Skype|WhatsApp') { return (Tr 'Messagerie : vous ne recevrez plus d''appels ni de messages tant qu''elle n''est pas ouverte.') }
+    if ($s -match 'NVIDIA|Radeon|AMD|igfx|Intel') { return (Tr 'Logiciel du fabricant de la carte graphique ou du processeur.') }
+    return $null
+}
+
+# Nom lisible d'un programme : description du fichier .exe (ex. « Google Chrome »), sinon le nom de l'entrée.
+function Get-StartupDisplayName([string]$Name, [string]$Command) {
+    $exe = $null
+    if ($Command -match '^\s*"([^"]+?\.exe)"') { $exe = $Matches[1] }
+    elseif ($Command -match '^\s*(.+?\.exe)(\s|$)') { $exe = $Matches[1] }
+    if ($exe) {
+        $exe = [Environment]::ExpandEnvironmentVariables($exe)
+        try {
+            if (Test-Path -LiteralPath $exe) {
+                $d = (Get-Item -LiteralPath $exe -ErrorAction Stop).VersionInfo.FileDescription
+                if ($d -and $d.Trim().Length -gt 1) { return $d.Trim() }
+            }
+        } catch { }
+    }
+    return $Name
+}
+
+function Get-StartupEntries {
+    $res = New-Object System.Collections.Generic.List[object]
+    foreach ($src in $StartupSources) {
+        $items = @()
+        if ($src.Kind -eq 'Reg') {
+            $key = Get-Item -LiteralPath $src.Path -ErrorAction SilentlyContinue
+            if (-not $key) { continue }
+            foreach ($n in $key.GetValueNames()) { if ($n) { $items += , @($n, [string]$key.GetValue($n), $n) } }
+        } elseif (Test-Path -LiteralPath $src.Path) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $src.Path -File -Force -ErrorAction SilentlyContinue)) {
+                if ($file.Name -ieq 'desktop.ini') { continue }
+                $items += , @($file.Name, $file.FullName, [IO.Path]::GetFileNameWithoutExtension($file.Name))
+            }
+        }
+        foreach ($it in $items) {
+            $c = Read-Reg $src.Approved $it[0]
+            $res.Add([pscustomobject]@{
+                Name = (Get-StartupDisplayName $it[2] $it[1]); ValueName = $it[0]; Command = $it[1]; Approved = $src.Approved; Scope = $src.Scope
+                Enabled = (-not $c.Exists) -or (Test-StartupEnabled $c.Value)
+                Id = 'Startup|' + $src.Approved + '|' + $it[0]; Note = (Get-StartupNote $it[0] $it[1])
+            })
+        }
+    }
+    return $res.ToArray()
+}
+
+function Set-StartupEnabled($Entry, [bool]$Enable) {
+    # Retour à l'état d'origine sauvegardé : on restaure exactement la valeur d'avant
+    if ($Backup.ContainsKey($Entry.Id) -and $Backup[$Entry.Id].Enable -ne $Enable) { Undo-Tweak $Backup[$Entry.Id]; return }
+    $items = @(New-RegBackup $Entry.Approved $Entry.ValueName)
+    $bytes = New-Object byte[] 12
+    if ($Enable) { $bytes[0] = 2 } else { $bytes[0] = 3; [BitConverter]::GetBytes([DateTime]::Now.ToFileTime()).CopyTo($bytes, 4) }
+    try {
+        Write-Reg $Entry.Approved $Entry.ValueName $bytes 'Binary'
+    } finally {
+        if (-not $Backup.ContainsKey($Entry.Id)) {
+            $Backup[$Entry.Id] = [pscustomobject]@{ Id = $Entry.Id; Kind = 'Startup'; Name = $Entry.Name; Enable = $Enable; Reboot = $false
+                                                    Date = (Get-Date).ToString('yyyy-MM-dd HH:mm'); Items = $items }
+            Save-Data
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------------------------
+#  Mises à jour des logiciels avec winget (outil officiel de Microsoft)
+# ---------------------------------------------------------------------------------------------
+function Get-WingetPath {
+    $c = Get-Command winget.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { return $c.Source }
+    $p = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
+    if (Test-Path -LiteralPath $p) { return $p }
+    return $null
+}
+
+# Lit le tableau affiché par « winget upgrade » (colonnes Nom, Id, Version, Disponible, Source, quelle que soit la langue).
+# Renvoie $null s'il n'y a pas de tableau (aucune mise à jour ou message d'erreur).
+# Récupère la sortie d'un job terminé, une ligne par élément (jamais un tableau imbriqué).
+function Receive-JobLines($Job) {
+    $out = @(Receive-Job -Job $Job -Wait -ErrorAction SilentlyContinue)
+    Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+    return @(Split-OutputLines $out)
+}
+
+# Découpe une sortie de commande en lignes : retours à la ligne, animation de progression (\r)
+# et codes de couleur du terminal sont pris en compte.
+function Split-OutputLines($Output) {
+    foreach ($item in @($Output)) {
+        foreach ($part in @($item)) {
+            foreach ($l in ([string]$part -split "`n")) {
+                # fin de ligne Windows (CR LF) retirée d'abord ; un CR restant au milieu = animation écrasée
+                ($l.TrimEnd("`r") -replace "\x1b\[[0-9;?]*[ -/]*[@-~]", '' -split "`r")[-1].TrimEnd()
+            }
+        }
+    }
+}
+
+function ConvertFrom-WingetTable($Lines) {
+    $lines = @(Split-OutputLines $Lines)
+    $sep = -1
+    for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\s*-{10,}\s*$') { $sep = $i; break } }
+    if ($sep -lt 1) { return $null }
+    $head = $lines[$sep - 1].TrimEnd()
+    $starts = @(0) + @([regex]::Matches($head, '(?<=\s)\S') | ForEach-Object { $_.Index })
+    if ($starts.Count -lt 4) { return $null }
+    $res = New-Object System.Collections.Generic.List[object]
+    for ($i = $sep + 1; $i -lt $lines.Count; $i++) {
+        $l = $lines[$i]
+        if ([string]::IsNullOrWhiteSpace($l) -or $l.Length -le $starts[2]) { break }
+        $col = @()
+        for ($k = 0; $k -lt $starts.Count; $k++) {
+            $a = $starts[$k]
+            if ($a -ge $l.Length) { $col += ''; continue }
+            $len = if ($k + 1 -lt $starts.Count) { [Math]::Min($starts[$k + 1], $l.Length) - $a } else { $l.Length - $a }
+            $col += $l.Substring($a, $len).Trim()
+        }
+        if (-not $col[1] -or -not $col[3]) { continue }
+        $res.Add([pscustomobject]@{
+            Name = $col[0]; Id = $col[1]; Version = $col[2]; Available = $col[3]
+            Source = $(if ($col.Count -gt 4) { $col[4] } else { '' })
+            Truncated = ($col[1] -match '…' -or $col[1].EndsWith('...'))
+        })
+    }
+    return , $res.ToArray()
+}
+
 Import-Data
 
 # ---------------------------------------------------------------------------------------------
@@ -1008,6 +1310,56 @@ $XamlText = @'
       </TabItem>
 
       <!-- ============ RESTAURER ============ -->
+      <!-- ============ DÉMARRAGE ============ -->
+      <TabItem Header="Démarrage" x:Name="TabStartup">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="8,0,8,8" Padding="16,12">
+            <StackPanel>
+              <TextBlock Style="{StaticResource Para}" Text="Programmes lancés automatiquement avec Windows : moins il y en a, plus Windows démarre vite. Cochez ceux dont vous voulez changer l'état (un programme activé sera désactivé, un programme désactivé sera réactivé). Rien n'est désinstallé."/>
+              <WrapPanel>
+                <Button x:Name="BtnStRefresh" Content="Actualiser la liste"/>
+                <Button x:Name="BtnStNone"    Content="Tout décocher"/>
+                <Button x:Name="BtnStStore"   Content="Applications du Store au démarrage"/>
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+          <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}" Margin="8" Padding="16,12">
+            <DockPanel>
+              <Button x:Name="BtnStApply" DockPanel.Dock="Right" Style="{StaticResource Accent}" Content="Appliquer la sélection (0)" VerticalAlignment="Center"/>
+              <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,16,0" Text="Effet au prochain démarrage de Windows. Une confirmation vous sera demandée."/>
+            </DockPanel>
+          </Border>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,8,0">
+            <StackPanel x:Name="PanelStartup" Margin="0,0,6,0"/>
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+
+      <!-- ============ LOGICIELS ============ -->
+      <TabItem Header="Logiciels" x:Name="TabSoftware">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="8,0,8,8" Padding="16,12">
+            <StackPanel>
+              <TextBlock Style="{StaticResource Para}" Text="Mettez à jour vos logiciels (navigateurs, lanceurs de jeux, outils...) avec winget, l'outil officiel de Microsoft intégré à Windows 10 et 11. Les fichiers viennent des sources officielles des éditeurs."/>
+              <WrapPanel>
+                <Button x:Name="BtnWgScan" Content="Rechercher les mises à jour"/>
+                <Button x:Name="BtnWgAll"  Content="Tout cocher"/>
+                <Button x:Name="BtnWgNone" Content="Tout décocher"/>
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+          <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}" Margin="8" Padding="16,12">
+            <DockPanel>
+              <Button x:Name="BtnWgUpdate" DockPanel.Dock="Right" Style="{StaticResource Accent}" Content="Mettre à jour la sélection (0)" VerticalAlignment="Center"/>
+              <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,16,0" Text="Fermez les logiciels concernés avant. Une mise à jour ne peut pas être annulée."/>
+            </DockPanel>
+          </Border>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,8,0">
+            <StackPanel x:Name="PanelWg" Margin="0,0,6,0"/>
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+
       <TabItem Header="Restaurer" x:Name="TabUndo">
         <DockPanel>
           <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="8,0,8,8" Padding="16,12">
@@ -1223,11 +1575,33 @@ try {
     if (Test-IntelRaptorDesktop $CpuName) {
         [void]$PanelTips.Children.Add((New-Text ('⚠  ' + (Tr 'Processeur Intel Core de 13e/14e génération (PC de bureau) détecté : Intel a publié des mises à jour du microcode qui corrigent un problème d''instabilité de ces processeurs. Installez le dernier BIOS du fabricant de votre carte mère (avec le microcode 0x12B ou plus récent) et gardez les réglages Intel par défaut (« Intel Default Settings »).')) '#F0B429' 13 -Margin (Th 0 0 0 8)))
     }
+    $script:Facts = $null
+    try { $script:Facts = Get-SystemFacts } catch { Write-Log ((Tr 'Analyse du PC incomplète : ') + $_.Exception.Message) }
+    $smart = @()
+    if ($script:Facts) { $smart = @(Get-SmartTips $script:Facts) }
+    foreach ($st in $smart) {
+        $col = '#8FB4FF'; $sym = '➜  '
+        if ($st.Level -eq 'warn') { $col = '#F0B429'; $sym = '⚠  ' }
+        [void]$PanelTips.Children.Add((New-Text ($sym + $st.Text) $col 13 -Margin (Th 0 0 0 4)))
+        if ($st.Action) {
+            $b = New-ActionButton $st.Label $st.Action
+            $b.Margin = (Th 24 2 0 8); $b.Padding = (Th 10 4 10 4); $b.HorizontalAlignment = 'Left'
+            [void]$PanelTips.Children.Add($b)
+        }
+    }
+    if ($smart.Count) { Write-Log ((Tr 'Analyse du PC : {0} conseil(s) personnalisé(s).') -f $smart.Count) }
     foreach ($tip in $tips) { [void]$PanelTips.Children.Add((New-Text ('•  ' + $tip) '#C3CAD6' 13 -Margin (Th 0 0 0 6))) }
 
-    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') 'https://www.nvidia.com/fr-fr/software/nvidia-app/')) }
-    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes AMD (site officiel)') 'https://www.amd.com/fr/support/download/drivers.html')) }
-    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes Intel (site officiel)') 'https://www.intel.fr/content/www/fr/fr/support/detect.html')) }
+    # Pages officielles des fabricants dans la langue choisie
+    $Urls = @{
+        fr = @{ Nv = 'https://www.nvidia.com/fr-fr/software/nvidia-app/'; Amd = 'https://www.amd.com/fr/support/download/drivers.html'; Intel = 'https://www.intel.fr/content/www/fr/fr/support/detect.html' }
+        de = @{ Nv = 'https://www.nvidia.com/de-de/software/nvidia-app/'; Amd = 'https://www.amd.com/de/support/download/drivers.html'; Intel = 'https://www.intel.de/content/www/de/de/support/detect.html' }
+        en = @{ Nv = 'https://www.nvidia.com/en-us/software/nvidia-app/'; Amd = 'https://www.amd.com/en/support/download/drivers.html'; Intel = 'https://www.intel.com/content/www/us/en/support/detect.html' }
+    }
+    $U = $Urls[$Lang]; if (-not $U) { $U = $Urls['en'] }
+    if ($HasNvidia)   { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilote NVIDIA (site officiel)') $U.Nv)) }
+    if ($HasAmdGpu -or $CpuVendor -eq 'AMD') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes AMD (site officiel)') $U.Amd)) }
+    if ($HasIntelGpu -or $CpuVendor -eq 'Intel') { [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Pilotes Intel (site officiel)') $U.Intel)) }
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Windows Update') 'ms-settings:windowsupdate'))
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Applications au démarrage') 'ms-settings:startupapps'))
     [void]$PanelLinks.Children.Add((New-ActionButton (Tr 'Stockage') 'ms-settings:storagesense'))
@@ -1295,10 +1669,10 @@ try {
     }
 
     # ------------------------- Point de restauration -------------------------
-    function Wait-JobUI($Job) {
+    function Wait-JobUI($Job, [switch]$All) {
         while ($Job.State -eq 'Running' -or $Job.State -eq 'NotStarted') { Invoke-UIPump; Start-Sleep -Milliseconds 120 }
-        $out = @(Receive-Job -Job $Job -ErrorAction SilentlyContinue)
-        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+        $out = @(Receive-JobLines $Job)
+        if ($All) { return $out }
         if ($out.Count) { return [string]$out[-1] }
         return (Tr 'ERREUR : aucune réponse')
     }
@@ -1405,7 +1779,11 @@ try {
             $card.Style = $Window.FindResource('ItemCard')
             $sp = New-Object System.Windows.Controls.StackPanel
             $cb = New-Object System.Windows.Controls.CheckBox
-            $cb.Content = (New-Text (Tr $e.Name) '#E6E9EF' 14 -Bold)
+            $label = Tr $e.Name
+            if ($e.Kind -eq 'Startup') {
+                $label = (Tr 'Démarrage : ') + $e.Name + '  (' + $(if ($e.Enable) { Tr 'Activé' } else { Tr 'Désactivé' }) + ')'
+            }
+            $cb.Content = (New-Text $label '#E6E9EF' 14 -Bold)
             $cb.Tag = $e
             $cb.Add_Checked({ Update-UndoCount }); $cb.Add_Unchecked({ Update-UndoCount })
             [void]$sp.Children.Add($cb)
@@ -1437,6 +1815,184 @@ try {
             [void]$PanelRemoved.Children.Add($card)
         }
     }
+
+    # ------------------------- Démarrage de Windows -------------------------
+    $script:StartupBoxes = New-Object System.Collections.Generic.List[object]
+
+    function Update-StartupCount {
+        $BtnStApply.Content = (Tr 'Appliquer la sélection ({0})') -f (Get-CheckedCount $script:StartupBoxes)
+    }
+
+    function Build-StartupList {
+        $PanelStartup.Children.Clear(); $script:StartupBoxes.Clear()
+        $entries = @(Get-StartupEntries | Sort-Object @{ Expression = 'Enabled'; Descending = $true }, Name)
+        if ($entries.Count -eq 0) {
+            [void]$PanelStartup.Children.Add((New-Text (Tr 'Aucun programme ne se lance au démarrage de Windows.') '#5BD48A' 14 -Margin (Th 4 8 0 0)))
+        }
+        foreach ($e in $entries) {
+            $card = New-Object System.Windows.Controls.Border
+            $card.Style = $Window.FindResource('ItemCard')
+            $sp = New-Object System.Windows.Controls.StackPanel
+            $cb = New-Object System.Windows.Controls.CheckBox
+            $cb.Content = (New-Text $e.Name '#E6E9EF' 14 -Bold)
+            $cb.Tag = $e
+            $cb.Add_Checked({ Update-StartupCount }); $cb.Add_Unchecked({ Update-StartupCount })
+            [void]$sp.Children.Add($cb)
+            $cmd = $e.Command
+            if ($e.ValueName -and $e.ValueName -ne $e.Name -and $e.Command -ne $e.ValueName) { $cmd = $e.ValueName + '   ·   ' + $cmd }
+            if ($cmd.Length -gt 140) { $cmd = $cmd.Substring(0, 137) + '...' }
+            [void]$sp.Children.Add((New-Text $cmd '#97A1B3' 12 -Margin (Th 21 3 0 0)))
+            $wp = New-Object System.Windows.Controls.WrapPanel; $wp.Margin = (Th 21 0 0 0)
+            if ($e.Enabled) { [void]$wp.Children.Add((New-Badge (Tr 'Activé') '#5BD48A' '#14301F')) }
+            else { [void]$wp.Children.Add((New-Badge (Tr 'Désactivé') '#AEB6C6' '#262D3B')) }
+            if ($e.Scope -eq 'all') { [void]$wp.Children.Add((New-Badge (Tr 'Tous les comptes') '#9DB7F5' '#1B2740')) }
+            else { [void]$wp.Children.Add((New-Badge (Tr 'Votre compte') '#9DB7F5' '#1B2740')) }
+            [void]$sp.Children.Add($wp)
+            if ($e.Note) { [void]$sp.Children.Add((New-Text ('ℹ  ' + $e.Note) '#F0B429' 12.5 -Margin (Th 21 6 0 0))) }
+            $card.Child = $sp
+            [void]$PanelStartup.Children.Add($card)
+            $script:StartupBoxes.Add($cb)
+        }
+        Update-StartupCount
+    }
+
+    $BtnStRefresh.Add_Click({ Build-StartupList })
+    $BtnStNone.Add_Click({ foreach ($cb in $script:StartupBoxes) { $cb.IsChecked = $false }; Update-StartupCount })
+    $BtnStStore.Add_Click({ try { Start-Process 'ms-settings:startupapps' } catch { } })
+
+    $BtnStApply.Add_Click({
+        $sel = @($script:StartupBoxes | Where-Object { $_.IsChecked -eq $true } | ForEach-Object { $_.Tag })
+        if ($sel.Count -eq 0) { Show-Info (Tr 'Aucun programme n''est coché.'); return }
+        $off = @($sel | Where-Object { $_.Enabled } | ForEach-Object { $_.Name })
+        $on = @($sel | Where-Object { -not $_.Enabled } | ForEach-Object { $_.Name })
+        $msg = ''
+        if ($off.Count) { $msg += (Tr 'Ne plus lancer au démarrage de Windows :') + "`n" + (Format-Bullets $off) + "`n`n" }
+        if ($on.Count) { $msg += (Tr 'Lancer de nouveau au démarrage de Windows :') + "`n" + (Format-Bullets $on) + "`n`n" }
+        $msg += (Tr 'Les programmes ne sont pas désinstallés : seul leur lancement automatique change. Vous pourrez revenir en arrière dans l''onglet « Restaurer ».\n\nConfirmez-vous ?')
+        if (-not (Confirm-Action $msg)) { Write-Log (Tr 'Démarrage : modifications annulées, non confirmées.'); return }
+        $okCount = 0; $errors = @()
+        foreach ($e in $sel) {
+            try {
+                Set-StartupEnabled $e (-not $e.Enabled)
+                $okCount++
+                Write-Log ((Tr 'Démarrage : ') + $e.Name + ' -> ' + $(if ($e.Enabled) { Tr 'Désactivé' } else { Tr 'Activé' }))
+            } catch {
+                $errors += ($e.Name + ' : ' + $_.Exception.Message)
+                Write-Log ((Tr 'ERREUR : ') + $e.Name + ' : ' + $_.Exception.Message)
+            }
+        }
+        Build-StartupList; Build-UndoList
+        $summary = (Tr '{0} programme(s) modifié(s) sur {1}. Effet au prochain démarrage de Windows.') -f $okCount, $sel.Count
+        if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors)) 'Warning' } else { Show-Info $summary }
+    })
+
+    # ------------------------- Mises à jour des logiciels (winget) -------------------------
+    $script:WgBoxes = New-Object System.Collections.Generic.List[object]
+    $script:WgList = @()
+
+    function Update-WgCount {
+        $BtnWgUpdate.Content = (Tr 'Mettre à jour la sélection ({0})') -f (Get-CheckedCount $script:WgBoxes)
+    }
+
+    function Show-WgMessage([string]$Text, [string]$Color = '#97A1B3') {
+        $PanelWg.Children.Clear(); $script:WgBoxes.Clear()
+        [void]$PanelWg.Children.Add((New-Text $Text $Color 14 -Margin (Th 4 8 0 0)))
+        Update-WgCount
+    }
+
+    function Build-WgList($List) {
+        $PanelWg.Children.Clear(); $script:WgBoxes.Clear()
+        foreach ($p in @($List)) {
+            $card = New-Object System.Windows.Controls.Border
+            $card.Style = $Window.FindResource('ItemCard')
+            $sp = New-Object System.Windows.Controls.StackPanel
+            $cb = New-Object System.Windows.Controls.CheckBox
+            $cb.Content = (New-Text $p.Name '#E6E9EF' 14 -Bold)
+            $cb.Tag = $p
+            $cb.Add_Checked({ Update-WgCount }); $cb.Add_Unchecked({ Update-WgCount })
+            [void]$sp.Children.Add($cb)
+            [void]$sp.Children.Add((New-Text ((Tr 'Version {0}  →  {1}') -f $p.Version, $p.Available) '#C3CAD6' 13 -Margin (Th 21 3 0 0)))
+            [void]$sp.Children.Add((New-Text ($p.Id + '   ·   ' + $p.Source) '#97A1B3' 12 -Margin (Th 21 2 0 0)))
+            if ($p.Truncated) {
+                $cb.IsEnabled = $false
+                [void]$sp.Children.Add((New-Text (Tr 'Identifiant incomplet : mettez ce logiciel à jour depuis le logiciel lui-même.') '#F0B429' 12.5 -Margin (Th 21 4 0 0)))
+            }
+            $card.Child = $sp
+            [void]$PanelWg.Children.Add($card)
+            $script:WgBoxes.Add($cb)
+        }
+        Update-WgCount
+    }
+
+    $BtnWgAll.Add_Click({ foreach ($cb in $script:WgBoxes) { if ($cb.IsEnabled) { $cb.IsChecked = $true } }; Update-WgCount })
+    $BtnWgNone.Add_Click({ foreach ($cb in $script:WgBoxes) { $cb.IsChecked = $false }; Update-WgCount })
+
+    $BtnWgScan.Add_Click({
+        $wg = Get-WingetPath
+        if (-not $wg) {
+            Show-WgMessage (Tr 'winget n''est pas disponible sur ce PC. Installez « Programme d''installation d''application » (App Installer) depuis le Microsoft Store, puis réessayez.') '#F0B429'
+            try { Start-Process 'ms-windows-store://pdp/?PFN=Microsoft.DesktopAppInstaller_8wekyb3d8bbwe' } catch { }
+            return
+        }
+        Show-Busy (Tr 'Recherche des mises à jour avec winget...\nCela peut prendre une minute.')
+        try {
+            $job = Start-Job -ArgumentList $wg -ScriptBlock {
+                param($wg)
+                try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+                & $wg upgrade --accept-source-agreements 2>&1 | ForEach-Object { [string]$_ }
+            }
+            $out = @(Wait-JobUI $job -All)
+            try { $out | Set-Content -LiteralPath (Join-Path $DataPath 'winget-derniere-recherche.txt') -Encoding UTF8 } catch { }
+            $list = ConvertFrom-WingetTable $out
+            if ($null -eq $list) {
+                $last = [string](@(Split-OutputLines $out | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\w{3}' }) | Select-Object -Last 1)
+                if ($last.Length -gt 200) { $last = $last.Substring(0, 197) + '...' }
+                $script:WgList = @()
+                Show-WgMessage ((Tr 'Aucune mise à jour trouvée. Message de winget : {0}') -f $last) '#5BD48A'
+                Write-Log ((Tr 'winget : ') + $last)
+            } else {
+                $script:WgList = @($list)
+                if ($script:WgList.Count -eq 0) { Show-WgMessage (Tr 'Tous vos logiciels connus de winget sont à jour.') '#5BD48A' }
+                else { Build-WgList $script:WgList }
+                Write-Log ((Tr 'winget : {0} mise(s) à jour disponible(s).') -f $script:WgList.Count)
+            }
+        } finally { Hide-Busy }
+    })
+
+    $BtnWgUpdate.Add_Click({
+        $sel = @($script:WgBoxes | Where-Object { $_.IsChecked -eq $true -and $_.IsEnabled } | ForEach-Object { $_.Tag })
+        if ($sel.Count -eq 0) { Show-Info (Tr 'Aucun logiciel n''est coché.'); return }
+        $names = @($sel | ForEach-Object { '{0}  ({1} → {2})' -f $_.Name, $_.Version, $_.Available })
+        $msg = (Tr 'Vous allez mettre à jour {0} logiciel(s) avec winget, l''outil officiel de Microsoft :\n\n{1}\n\nFermez ces logiciels avant de continuer. Une mise à jour ne peut pas être annulée.\n\nConfirmez-vous ?') -f $sel.Count, (Format-Bullets $names)
+        if (-not (Confirm-Action $msg)) { Write-Log (Tr 'Mises à jour annulées : non confirmées.'); return }
+        $wg = Get-WingetPath
+        $okCount = 0; $errors = @(); $done = @()
+        Show-Busy (Tr 'Mise à jour des logiciels...')
+        try {
+            foreach ($p in $sel) {
+                $TxtBusy.Text = (Tr 'Mise à jour : ') + $p.Name
+                Invoke-UIPump
+                $job = Start-Job -ArgumentList $wg, $p.Id -ScriptBlock {
+                    param($wg, $id)
+                    & $wg upgrade --id $id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+                    'EXIT:' + $LASTEXITCODE
+                }
+                $r = Wait-JobUI $job
+                if ($r -eq 'EXIT:0') { $okCount++; $done += $p.Id; Write-Log ((Tr 'Mis à jour : ') + $p.Name + ' ' + $p.Available) }
+                else {
+                    $errors += ('{0} : {1}' -f $p.Name, $r)
+                    Write-Log ((Tr 'ERREUR : ') + $p.Name + ' : ' + $r)
+                }
+            }
+        } finally {
+            Hide-Busy
+            $script:WgList = @($script:WgList | Where-Object { $done -notcontains $_.Id })
+            if ($script:WgList.Count) { Build-WgList $script:WgList } else { Show-WgMessage (Tr 'Tous vos logiciels connus de winget sont à jour.') '#5BD48A' }
+        }
+        $summary = (Tr '{0} logiciel(s) mis à jour sur {1}.') -f $okCount, $sel.Count
+        if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors) + "`n`n" + (Tr 'Certains logiciels doivent être fermés, ou mis à jour depuis le logiciel lui-même.')) 'Warning' }
+        else { Show-Info $summary }
+    })
 
     # ------------------------- Actions des boutons -------------------------
     $BtnProfGame.Add_Click({ Select-Profile 'Jeux' })
@@ -1535,7 +2091,7 @@ try {
     $BtnUndo.Add_Click({
         $sel = @($script:UndoBoxes | Where-Object { $_.IsChecked -eq $true } | ForEach-Object { $_.Tag })
         if ($sel.Count -eq 0) { Show-Info (Tr 'Aucun réglage n''est coché.'); return }
-        $msg = (Tr 'Vous allez remettre {0} réglage(s) comme avant :\n\n{1}\n\nConfirmez-vous ?') -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { Tr $_.Name }))
+        $msg = (Tr 'Vous allez remettre {0} réglage(s) comme avant :\n\n{1}\n\nConfirmez-vous ?') -f $sel.Count, (Format-Bullets @($sel | ForEach-Object { if ($_.Kind -eq 'Startup') { (Tr 'Démarrage : ') + $_.Name } else { Tr $_.Name } }))
         if (-not (Confirm-Action $msg)) { Write-Log (Tr 'Restauration annulée : non confirmée.'); return }
 
         Show-Busy (Tr 'Restauration des réglages...')
@@ -1548,7 +2104,7 @@ try {
                     Undo-Tweak $e
                     $okCount++
                     if ($e.Reboot) { $needReboot = $true }
-                    Write-Log ((Tr 'Restauré : ') + (Tr $e.Name))
+                    Write-Log ((Tr 'Restauré : ') + $(if ($e.Kind -eq 'Startup') { (Tr 'Démarrage : ') + $e.Name } else { Tr $e.Name }))
                 } catch {
                     $errors += ((Tr $e.Name) + ' : ' + $_.Exception.Message)
                     Write-Log ((Tr 'ERREUR restauration : ') + (Tr $e.Name) + ' : ' + $_.Exception.Message)
@@ -1556,7 +2112,7 @@ try {
             }
         } finally {
             Hide-Busy
-            Build-TweakList; Build-UndoList
+            Build-TweakList; Build-UndoList; Build-StartupList
         }
         $summary = (Tr '{0} réglage(s) restauré(s) sur {1}.') -f $okCount, $sel.Count
         if ($errors.Count) { Show-Info ($summary + "`n`n" + (Tr 'Erreurs :') + "`n" + (Format-Bullets $errors)) 'Warning' }
@@ -1577,15 +2133,33 @@ try {
                Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
         $thermalOk = $true
         while ($Sync.Run) {
-            try { $Sync.Cpu = [int](Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop).PercentProcessorTime } catch { $Sync.Cpu = $null }
+            try {
+                # Compteurs bruts : utilisation = 1 - (temps d'inactivité / temps écoulé) entre deux mesures
+                $r = Get-CimInstance Win32_PerfRawData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+                $cur = @{ Idle = [double]$r.PercentProcessorTime; Stamp = [double]$r.Timestamp_Sys100NS }
+                if ($prevCpu -and $cur.Stamp -gt $prevCpu.Stamp) {
+                    $u = (1 - ($cur.Idle - $prevCpu.Idle) / ($cur.Stamp - $prevCpu.Stamp)) * 100
+                    $Sync.Cpu = [int][Math]::Round([Math]::Max(0, [Math]::Min(100, $u)))
+                }
+                $prevCpu = $cur
+            } catch { $Sync.Cpu = $null }
             try {
                 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
                 $Sync.Ram = [int](100 - 100 * $os.FreePhysicalMemory / $os.TotalVisibleMemorySize)
             } catch { $Sync.Ram = $null }
             try {
-                $eng = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction Stop | Where-Object { $_.Name -like '*engtype_3D' })
-                $sum = ($eng | Measure-Object -Property UtilizationPercentage -Sum).Sum
-                $Sync.Gpu = [int][Math]::Min(100, [double]$sum)
+                # Compteurs bruts du moteur 3D de chaque processus : temps d'activité / temps écoulé
+                $eng = @(Get-CimInstance Win32_PerfRawData_GPUPerformanceCounters_GPUEngine -ErrorAction Stop | Where-Object { $_.Name -like '*engtype_3D' })
+                $curGpu = @{}; $sum = 0.0
+                foreach ($e in $eng) {
+                    $curGpu[$e.Name] = @([double]$e.UtilizationPercentage, [double]$e.Timestamp_Sys100NS)
+                    if ($prevGpu -and $prevGpu.ContainsKey($e.Name)) {
+                        $pv = $prevGpu[$e.Name]; $dt = $curGpu[$e.Name][1] - $pv[1]
+                        if ($dt -gt 0) { $sum += ($curGpu[$e.Name][0] - $pv[0]) / $dt * 100 }
+                    }
+                }
+                if ($prevGpu) { $Sync.Gpu = [int][Math]::Round([Math]::Max(0, [Math]::Min(100, $sum))) }
+                $prevGpu = $curGpu
             } catch { $Sync.Gpu = $null }
             if ($smi) {
                 try {
@@ -1726,6 +2300,8 @@ try {
     Write-Log ((Tr '{0} {1} démarré - {2} {3} (build {4}).') -f $AppName, $AppVersion, $OsCaption, $DispVer, $Build)
     Build-TweakList
     Build-AppList
+    Build-StartupList
+    Show-WgMessage (Tr 'Cliquez sur « Rechercher les mises à jour » pour vérifier vos logiciels.')
     Build-UndoList
     if ($Backup.Count -gt 0) { Write-Log ((Tr '{0} réglage(s) modifié(s) précédemment peuvent être restaurés (onglet « Restaurer »).') -f $Backup.Count) }
 

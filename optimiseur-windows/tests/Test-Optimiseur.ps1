@@ -159,6 +159,141 @@ foreach ($t in @($Tweaks | Where-Object { (Test-TweakAvailable $_) -and $_.Undoa
     }
 }
 
+# 6. Nouveautés 1.1 ---------------------------------------------------------------------------
+function Row($a, $b, $c, $d, $e) { '{0,-29}{1,-28}{2,-13}{3,-13}{4}' -f $a, $b, $c, $d, $e }
+Check 'winget : lecture du tableau (anglais, avec animation)' {
+    $txt = @("   - `r   \ `r", (Row 'Name' 'Id' 'Version' 'Available' 'Source'), ('-' * 92),
+             (Row 'Mozilla Firefox (x64 en-US)' 'Mozilla.Firefox' '120.0' '121.0' 'winget'),
+             (Row 'Steam' 'Valve.Steam' '2.10.91.91' '3.0' 'winget'),
+             (Row 'Very Long Application Name…' 'Some.VeryLongIdentifierTha…' '1.0' '2.0' 'winget'),
+             '3 upgrades available.')
+    $r = ConvertFrom-WingetTable $txt
+    if (@($r).Count -ne 3) { throw "$(@($r).Count) lignes" }
+    if ($r[0].Id -ne 'Mozilla.Firefox' -or $r[0].Available -ne '121.0' -or $r[0].Name -ne 'Mozilla Firefox (x64 en-US)') { throw 'ligne 1 incorrecte' }
+    if ($r[1].Version -ne '2.10.91.91' -or $r[1].Source -ne 'winget') { throw 'ligne 2 incorrecte' }
+    if (-not $r[2].Truncated -or $r[0].Truncated) { throw 'identifiant tronqué mal détecté' }
+    $true
+}
+Check 'winget : lecture du tableau (français) et absence de mises à jour' {
+    $txt = @((Row 'Nom' 'ID' 'Version' 'Disponible' 'Source'), ('-' * 92), (Row 'Discord' 'Discord.Discord' '1.0.9' '1.0.10' 'winget'), '')
+    $r = ConvertFrom-WingetTable $txt
+    if (@($r).Count -ne 1 -or $r[0].Available -ne '1.0.10') { throw 'tableau français mal lu' }
+    $none = ConvertFrom-WingetTable @('No installed package found matching input criteria.')
+    $null -eq $none
+}
+# Cas réel signalé : réponse allemande avec 3 mises à jour (LocalSend, Teams, OpenCode)
+function Row2($a, $b, $c, $d, $e) { '{0,-26}{1,-27}{2,-21}{3,-20}{4}' -f $a, $b, $c, $d, $e }
+$DeTable = @("   - `r   \ `r", (Row2 'Name' 'ID' 'Version' 'Verfügbar' 'Quelle'), ('-' * 100),
+             (Row2 'LocalSend' 'LocalSend.LocalSend' '1.18.2' '1.19.0' 'winget'),
+             (Row2 'Microsoft Teams' 'Microsoft.Teams' '26288.2004.5269.3420' '26304.1207.5384.858' 'winget'),
+             (Row2 'OpenCode' 'Anomaly.OpenCode.Desktop' '2.3.2' '2.4.1' 'winget'),
+             '3 Aktualisierungen verfügbar.',
+             'Mindestens 1 Paket verfügt über Versionsnummern, die nicht ermittelt werden können.')
+function Test-DeTable($r) {
+    if (@($r).Count -ne 3) { throw "$(@($r).Count) ligne(s) au lieu de 3" }
+    if ($r[0].Id -ne 'LocalSend.LocalSend' -or $r[0].Available -ne '1.19.0') { throw 'LocalSend mal lu' }
+    if ($r[1].Id -ne 'Microsoft.Teams' -or $r[1].Version -ne '26288.2004.5269.3420' -or $r[1].Available -ne '26304.1207.5384.858') { throw 'Teams mal lu' }
+    if ($r[2].Id -ne 'Anomaly.OpenCode.Desktop' -or $r[2].Available -ne '2.4.1') { throw 'OpenCode mal lu' }
+    $true
+}
+Check 'winget : réponse allemande reçue par un job (cas réel)' {
+    $job = Start-Job -ArgumentList (, $DeTable) -ScriptBlock { param($t) foreach ($l in $t) { $l } }
+    $lines = @(Receive-JobLines $job)
+    if ($lines.Count -lt 7) { throw "$($lines.Count) ligne(s) reçue(s) : les lignes ont été collées" }
+    Test-DeTable (ConvertFrom-WingetTable $lines)
+}
+Check 'winget : une seule chaîne avec retours à la ligne et codes couleur' {
+    $one = ($DeTable -join "`r`n") -replace 'LocalSend\.LocalSend', ([char]27 + '[0m' + 'LocalSend.LocalSend')
+    Test-DeTable (ConvertFrom-WingetTable @($one))
+}
+Check 'winget : tableau imbriqué (ancienne erreur)' {
+    Test-DeTable (ConvertFrom-WingetTable @(, [string[]]$DeTable))
+}
+function Facts([hashtable]$h) {
+    $d = @{ Displays = @(); RamModules = 2; RamType = 34; RamMHz = 6000; RamGB = 32; IsLaptop = $false; OnBattery = $false
+            SysFreePct = 60; SysFreeGB = 500; SysMedia = 'SSD'; SysHealth = 'Healthy'; Gpus = @(); UptimeDays = 1; RebootPending = $false }
+    foreach ($k in $h.Keys) { $d[$k] = $h[$k] }
+    [pscustomobject]$d
+}
+Check 'Astuces : PC en bon état = aucun conseil' {
+    $t = @(Get-SmartTips (Facts @{ Displays = @([pscustomobject]@{ Index = 1; Width = 2560; Height = 1440; Current = 144; Max = 144 })
+                                   Gpus = @([pscustomobject]@{ Name = 'GPU'; DriverDate = (Get-Date).AddDays(-20) }) }))
+    if ($t.Count) { throw ($t.Text -join ' | ') }
+    $true
+}
+Check 'Astuces : écran 60 Hz, disque plein, HDD, mémoire, pilote ancien, redémarrage' {
+    $t = @(Get-SmartTips (Facts @{ Displays = @([pscustomobject]@{ Index = 1; Width = 1920; Height = 1080; Current = 60; Max = 144 })
+                                   RamModules = 1; RamType = 26; RamMHz = 2133; RamGB = 8; SysFreePct = 9; SysFreeGB = 20; SysMedia = 'HDD'
+                                   Gpus = @([pscustomobject]@{ Name = 'GPU'; DriverDate = (Get-Date).AddDays(-400) }); UptimeDays = 12; RebootPending = $true }))
+    if ($t.Count -ne 9) { throw "$($t.Count) conseils : " + ($t.Text -join ' | ') }
+    if (@($t | Where-Object { $_.Level -eq 'warn' }).Count -ne 3) { throw 'niveaux incorrects' }
+    if (-not ($t[0].Text -match '144') -or $t[0].Action -ne 'ms-settings:display') { throw 'conseil écran incorrect' }
+    $true
+}
+Check 'Astuces : portable sur batterie (pas de conseil mémoire)' {
+    $t = @(Get-SmartTips (Facts @{ IsLaptop = $true; OnBattery = $true; RamModules = 1; RamType = 26; RamMHz = 2133 }))
+    ($t.Count -eq 1) -and ($t[0].Level -eq 'info')
+}
+Check 'Analyse du PC (lecture seule)' {
+    $f = Get-SystemFacts
+    Write-Host ("         écrans : {0} · mémoire : {1} Go, {2} MT/s · disque : {3} {4} % libres · allumé depuis {5} j" -f `
+        (@($f.Displays | ForEach-Object { "$($_.Current)/$($_.Max) Hz" }) -join ', '), $f.RamGB, $f.RamMHz, $f.SysMedia, $f.SysFreePct, $f.UptimeDays)
+    $null -ne $f
+}
+Check 'Démarrage : état des octets StartupApproved' {
+    (Test-StartupEnabled $null) -and (Test-StartupEnabled ([byte[]](2, 0, 0))) -and (Test-StartupEnabled ([byte[]](6, 0))) -and
+    -not (Test-StartupEnabled ([byte[]](3, 0, 0))) -and -not (Test-StartupEnabled ([byte[]](7)))
+}
+$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'; $TestName = 'OptimiseurPC-Test'
+function Get-TestEntry { @(Get-StartupEntries | Where-Object { $_.ValueName -eq $TestName })[0] }
+Check 'Démarrage : désactiver puis restaurer depuis l''onglet Restaurer' {
+    Write-Reg $RunKey $TestName 'C:\Windows\System32\notepad.exe' 'String'
+    $e = Get-TestEntry
+    try {
+        if (-not $e -or -not $e.Enabled) { throw 'entrée de test introuvable ou désactivée' }
+        Set-StartupEnabled $e $false
+        if ((Get-TestEntry).Enabled) { throw 'toujours activé' }
+        if (([byte[]](Read-Reg $e.Approved $TestName).Value)[0] -ne 3) { throw 'octet StartupApproved incorrect' }
+        Import-Data
+        Undo-Tweak $Backup[$e.Id]
+        if (-not (Get-TestEntry).Enabled) { throw 'non réactivé' }
+        if ((Read-Reg $e.Approved $TestName).Exists) { throw 'valeur StartupApproved non supprimée' }
+        $true
+    } finally {
+        Remove-ItemProperty -LiteralPath $RunKey -Name $TestName -ErrorAction SilentlyContinue
+        if ($e) { Remove-ItemProperty -LiteralPath $e.Approved -Name $TestName -ErrorAction SilentlyContinue }
+    }
+}
+Check 'Démarrage : désactiver puis réactiver depuis l''onglet Démarrage' {
+    Write-Reg $RunKey $TestName 'C:\Windows\System32\notepad.exe' 'String'
+    $e = Get-TestEntry
+    try {
+        Set-StartupEnabled $e $false
+        Set-StartupEnabled (Get-TestEntry) $true
+        if (-not (Get-TestEntry).Enabled) { throw 'non réactivé' }
+        if ($Backup.ContainsKey($e.Id)) { throw 'sauvegarde restante' }
+        -not (Read-Reg $e.Approved $TestName).Exists
+    } finally {
+        Remove-ItemProperty -LiteralPath $RunKey -Name $TestName -ErrorAction SilentlyContinue
+        if ($e) { Remove-ItemProperty -LiteralPath $e.Approved -Name $TestName -ErrorAction SilentlyContinue }
+    }
+}
+Check 'Démarrage : nom lisible des programmes' {
+    $np = Join-Path $env:SystemRoot 'System32\notepad.exe'
+    $a = Get-StartupDisplayName 'Test_ABC123' ('"' + $np + '" --flag')
+    $b = Get-StartupDisplayName 'Test_ABC123' ($np + ' /x')
+    $c = Get-StartupDisplayName 'Test_ABC123' 'C:\Introuvable\app.exe --x'
+    $d = Get-StartupDisplayName 'Raccourci' 'C:\Users\x\Startup\Raccourci.lnk'
+    Write-Host "         notepad -> « $a »"
+    ($a -ne 'Test_ABC123') -and ($a -eq $b) -and ($c -eq 'Test_ABC123') -and ($d -eq 'Raccourci')
+}
+Check 'Liste des programmes au démarrage (lecture)' { $l = @(Get-StartupEntries); Write-Host "         $($l.Count) programme(s) au démarrage"; $true }
+Check 'winget (information)' {
+    $wg = Get-WingetPath
+    if ($wg) { Write-Host "         winget : $wg" } else { Write-Host '         winget absent sur cette machine' }
+    $true
+}
+
 Check 'Nettoyage des fichiers temporaires' { Invoke-Tweak ($Tweaks | Where-Object Id -eq 'TempClean'); $true }
 Check 'Aucune sauvegarde restante' { $Backup.Count -eq 0 }
 

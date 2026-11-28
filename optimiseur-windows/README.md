@@ -34,9 +34,11 @@ Le test automatique signale tout texte oublié.
 ## Les onglets
 | Onglet | Rôle |
 |---|---|
-| **Tableau de bord** | Matériel détecté, utilisation processeur / carte graphique / mémoire en direct, températures (carte NVIDIA via le pilote officiel, capteur ACPI si disponible), conseils et liens vers les pilotes **officiels** du fabricant. |
+| **Tableau de bord** | Matériel détecté, utilisation processeur / carte graphique / mémoire en direct, températures (carte NVIDIA via le pilote officiel, capteur ACPI si disponible), **astuces personnalisées** (voir plus bas) et liens vers les pilotes **officiels** du fabricant. |
 | **Optimisations** | ~28 réglages expliqués, rangés par thème. Boutons « Suggestion Jeux / Bureau / Anti-surchauffe » qui **cochent seulement** des cases. |
 | **Applications inutiles** | Applications préinstallées détectées (Actualités, Solitaire avec pubs, Candy Crush, Cortana…). Désinstallation pour votre compte, réinstallables depuis le Microsoft Store. |
+| **Démarrage** | Programmes lancés avec Windows : désactivez ceux qui ralentissent le démarrage (même mécanisme que le Gestionnaire des tâches), case + confirmation, annulable. |
+| **Logiciels** | Recherche et installe les mises à jour de vos logiciels avec **winget**, l'outil officiel de Microsoft : vous cochez, vous confirmez. |
 | **Restaurer** | Remet chaque réglage comme avant, lien vers le Store pour les applications, accès à la Restauration du système. |
 | **À propos** | Ce que fait et ne fait pas l'application, mentions légales. |
 
@@ -46,6 +48,15 @@ Le test automatique signale tout texte oublié.
 - Un **point de restauration Windows** est proposé avant chaque série de modifications.
 - Les valeurs d'origine sont sauvegardées dans `%LOCALAPPDATA%\OptimiseurPC\sauvegarde.json` ; un journal est tenu dans `journal.log`.
 - Les réglages déjà actifs sont signalés « Déjà actif » et ne peuvent pas être recochés.
+
+## Astuces personnalisées (nouveau en 1.1)
+L'application analyse le PC (lecture seule, rien n'est modifié) et affiche des conseils seulement s'ils vous concernent :
+- écran réglé à 60 Hz alors qu'il peut afficher 144 Hz ou plus (avec un bouton vers les paramètres d'affichage) ;
+- mémoire qui ne tourne pas à sa vitesse (profil XMP / EXPO à activer dans le BIOS — l'application ne touche jamais au BIOS) ;
+- une seule barrette de mémoire (simple canal), peu de mémoire ;
+- disque système presque plein, disque dur classique (HDD), problème de santé du disque ;
+- pilote graphique de plus de 6 mois ;
+- PC pas redémarré depuis plus de 7 jours, redémarrage en attente pour Windows Update, portable sur batterie.
 
 ## Les réglages proposés
 **Jeux et carte graphique** : Mode Jeu, planification GPU à accélération matérielle (nécessaire au DLSS Frame Generation),
